@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nalgebra = "0.34.1"
 nalgebra-glm = "*"
 sdl3 = { version = "*", features = ["bundled"] }
 apricot = { git = "https://github.com/Rakhyvel/apricot.git" }
