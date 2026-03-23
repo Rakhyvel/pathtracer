@@ -1,6 +1,12 @@
+mod dielectric;
+mod emissive;
 mod hit_info;
+mod lambertian;
 mod material;
+mod material_mgr;
 mod object;
+mod plane;
+mod sphere;
 mod tracer;
 
 use std::cell::RefCell;
@@ -8,9 +14,6 @@ use std::cell::RefCell;
 use apricot::app::run;
 use tracer::Tracer;
 
-// object
-// material
-// material_mgr
 // tracer
 // app
 

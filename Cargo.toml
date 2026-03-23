@@ -7,3 +7,5 @@ edition = "2024"
 nalgebra-glm = "*"
 sdl3 = { version = "*", features = ["bundled"] }
 apricot = { git = "https://github.com/Rakhyvel/apricot.git" }
+rand = "0.8.4"
+gl = "*"

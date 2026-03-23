@@ -74,7 +74,7 @@ dependencies = [
 [[package]]
 name = "apricot"
 version = "0.1.0"
-source = "git+https://github.com/Rakhyvel/apricot.git#67e8daedac29782970a38dc11813dd7767f59b3f"
+source = "git+https://github.com/Rakhyvel/apricot.git#555e2b592c6ceac4725bbb4046b45e3a037c371e"
 dependencies = [
  "chrono",
  "gl",
@@ -999,7 +999,9 @@ name = "pathtracer"
 version = "0.1.0"
 dependencies = [
  "apricot",
+ "gl",
  "nalgebra-glm",
+ "rand 0.8.5",
  "sdl3",
 ]
 
