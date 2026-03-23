@@ -2,13 +2,8 @@
 A fun little path tracer
 
 ## To build & run
-Dependencies:
-- SDL3
-- Eigen
 ```
-cmake -S . -B build
-cmake --build build
-.\build\pathtrace.exe
+cargo run
 ```
 
 ## TODO
