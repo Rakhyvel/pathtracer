@@ -6,13 +6,14 @@ use apricot::{
     rectangle::Rectangle,
     render_core::TextureId,
 };
+use rand::Rng;
 use sdl2::keyboard::Scancode;
 use std::f32::consts::PI;
 
 use crate::{
-    dielectric::Dielectric, emissive::Emissive, hit_info::HitInfo, lambertian::Lambertian,
-    material_mgr::MaterialMgr, metallic::Metallic, object::Object, plane::MaterialPlane,
-    sphere::MaterialSphere,
+    dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
+    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::Object,
+    plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -89,14 +90,17 @@ impl Scene for Tracer {
     }
 
     fn render(&mut self, app: &App) {
-        for _n in 0..10 {
+        let mut rng = rand::thread_rng();
+        for _n in 0..30 {
             self.n += 1;
             for y in 0..self.height {
                 for x in 0..self.width {
+                    let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
+                    let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
                     let i = y * self.width + x;
                     let ray = self.camera.get_ray(
-                        x as f32,
-                        y as f32,
+                        jitter_x,
+                        jitter_y,
                         self.width as f32,
                         self.height as f32,
                     );
@@ -134,7 +138,7 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 5;
+        const TILE_SIZE: i32 = 10;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -150,8 +154,8 @@ impl Tracer {
         app.renderer
             .add_mesh_from_obj(QUAD_XY_DATA, Some("quad-xy"));
 
-        let position = nalgebra_glm::vec3(0.0, 0.0, 0.0);
-        let lookat = nalgebra_glm::vec3(-1.0, 0.0, 0.0);
+        let position = nalgebra_glm::vec3(0.0, 2.0, 0.0);
+        let lookat = nalgebra_glm::vec3(-1.0, 2.00, 0.0);
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
 
         let camera = Camera::new(
@@ -195,7 +199,7 @@ impl Tracer {
         let dielectric_blue = material_mgr.add(
             Box::new(Dielectric {
                 ior: 1.52,
-                tint: nalgebra_glm::vec3(0.9, 0.9, 0.95),
+                tint: nalgebra_glm::vec3(0.4, 0.7, 0.9),
             }),
             Some("dielectric_blue"),
         );
@@ -208,17 +212,24 @@ impl Tracer {
         );
         let metallic_red = material_mgr.add(
             Box::new(Metallic {
-                roughness: 0.01,
+                roughness: 0.1,
                 albedo: nalgebra_glm::vec3(0.9, 0.7, 0.4),
             }),
             Some("metallic_red"),
+        );
+        let glossy = material_mgr.add(
+            Box::new(Glossy {
+                roughness: 0.3,
+                albedo: nalgebra_glm::vec3(0.7, 0.2, 0.1),
+            }),
+            Some("glossy"),
         );
 
         // Setup objects
         let objects: Vec<Box<dyn Object>> = vec![
             Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(40.0, 40.0, 40.0),
-                10.0,
+                nalgebra_glm::vec3(4.0, 4.0, 4.0),
+                0.1,
                 emissive,
             )),
             Box::new(MaterialSphere::new(
@@ -229,7 +240,7 @@ impl Tracer {
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(-0.0, 0.0, 0.0),
                 1.0,
-                dielectric_green,
+                glossy,
             )),
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(2.0, 0.0, 0.0),

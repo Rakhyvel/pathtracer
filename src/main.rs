@@ -1,5 +1,6 @@
 mod dielectric;
 mod emissive;
+mod glossy;
 mod hit_info;
 mod lambertian;
 mod material;
