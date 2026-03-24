@@ -7,7 +7,15 @@ use apricot::{
     render_core::TextureId,
 };
 
-use crate::{hit_info::HitInfo, material_mgr::MaterialMgr, object::Object};
+use crate::{
+    emissive::Emissive,
+    hit_info::HitInfo,
+    lambertian::Lambertian,
+    material_mgr::{MaterialId, MaterialMgr},
+    object::Object,
+    plane::MaterialPlane,
+    sphere::MaterialSphere,
+};
 
 pub struct Tracer {
     n: usize,
@@ -41,9 +49,9 @@ impl Scene for Tracer {
                 let prev_pixel = self.image[i];
                 self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
 
-                self.pixels[i * 4 + 0] = self.image[i].x as u8;
-                self.pixels[i * 4 + 1] = self.image[i].y as u8;
-                self.pixels[i * 4 + 2] = self.image[i].z as u8;
+                self.pixels[i * 4 + 0] = (self.image[i].x * 255.0) as u8;
+                self.pixels[i * 4 + 1] = (self.image[i].y * 255.0) as u8;
+                self.pixels[i * 4 + 2] = (self.image[i].z * 255.0) as u8;
                 self.pixels[i * 4 + 3] = 255;
             }
         }
@@ -64,6 +72,11 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
+        const TILE_SIZE: i32 = 10;
+
+        let width = (app.window_size.x / TILE_SIZE) as usize;
+        let height = (app.window_size.y / TILE_SIZE) as usize;
+
         app.renderer.add_program(
             create_program(
                 include_str!("../shaders/2d.vert"),
@@ -75,8 +88,8 @@ impl Tracer {
         app.renderer
             .add_mesh_from_obj(QUAD_XY_DATA, Some("quad-xy"));
 
-        let position = nalgebra_glm::vec3(0.0, 0.0, 0.0);
-        let lookat = nalgebra_glm::vec3(0.0, 0.0, 1.0);
+        let position = nalgebra_glm::vec3(0.0, 0.5, -5.0);
+        let lookat = nalgebra_glm::vec3(0.0, 0.5, -4.0);
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
 
         let camera = Camera::new(
@@ -90,21 +103,47 @@ impl Tracer {
         );
 
         let texture = Texture::new();
-        let pixels: Vec<u8> = vec![0u8; 80 * 60 * 4];
-        texture.set_pixels(80, 60, &pixels);
+        let pixels: Vec<u8> = vec![0u8; width * height * 4];
+        texture.set_pixels(width as i32, height as i32, &pixels);
         let texture_id = app.renderer.add_texture(texture, Some("texture"));
 
-        let image: Vec<nalgebra_glm::Vec3> = vec![nalgebra_glm::vec3(0.0, 0.0, 0.0); 80 * 60 * 4];
+        let image: Vec<nalgebra_glm::Vec3> =
+            vec![nalgebra_glm::vec3(0.0, 0.0, 0.0); width * height * 4];
 
-        let material_mgr = MaterialMgr::new();
+        // Setup materials
+        let mut material_mgr = MaterialMgr::new();
+        let emissive = material_mgr.add(
+            Box::new(Emissive {
+                color: nalgebra_glm::vec3(1.0, 1.0, 1.0),
+            }),
+            Some("emissive"),
+        );
+        let lambert = material_mgr.add(
+            Box::new(Lambertian {
+                albedo: nalgebra_glm::vec3(1.0, 0.5, 0.0),
+            }),
+            Some("lambertOrange"),
+        );
 
-        let objects = Vec::new();
+        // Setup objects
+        let objects: Vec<Box<dyn Object>> = vec![
+            Box::new(MaterialSphere::new(
+                nalgebra_glm::vec3(0.0, 0.0, 0.0),
+                1.0,
+                emissive,
+            )),
+            Box::new(MaterialPlane::new(
+                nalgebra_glm::vec3(0.0, 1.0, 0.0),
+                0.0,
+                lambert,
+            )),
+        ];
 
         Tracer {
             n: 0,
-            width: 80,
-            height: 60,
-            tile_size: 10,
+            width,
+            height,
+            tile_size: TILE_SIZE as usize,
             camera,
             texture_id,
             image,
@@ -131,10 +170,10 @@ impl Tracer {
         let emitted = hit_material.emission();
 
         match hit_material.scatter(ray, &hit) {
-            None => return emitted,
+            None => emitted,
             Some(scatter) => {
                 let incoming = self.trace(&scatter.ray, depth + 1);
-                return emitted + scatter.attenuation.component_mul(&incoming);
+                emitted + scatter.attenuation.component_mul(&incoming)
             }
         }
     }

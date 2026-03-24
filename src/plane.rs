@@ -3,9 +3,18 @@ use apricot::{plane::Plane, ray::Ray};
 use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
 
 const EPS: f32 = 1e-5;
-struct MaterialPlane {
+pub struct MaterialPlane {
     plane: Plane,
     mat_id: MaterialId,
+}
+
+impl MaterialPlane {
+    pub fn new(normal: nalgebra_glm::Vec3, dist: f32, mat_id: MaterialId) -> Self {
+        Self {
+            plane: Plane::new(normal, dist),
+            mat_id,
+        }
+    }
 }
 
 impl Object for MaterialPlane {

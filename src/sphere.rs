@@ -2,12 +2,21 @@ use apricot::{ray::Ray, sphere::Sphere};
 
 use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
 
-struct MaterialSphere {
+pub struct MaterialSphere {
     sphere: Sphere,
     mat_id: MaterialId,
 }
 
 const EPS: f32 = 1e-5;
+
+impl MaterialSphere {
+    pub fn new(center: nalgebra_glm::Vec3, radius: f32, mat_id: MaterialId) -> Self {
+        Self {
+            sphere: Sphere::new(center, radius),
+            mat_id,
+        }
+    }
+}
 
 impl Object for MaterialSphere {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
