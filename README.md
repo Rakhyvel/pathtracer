@@ -8,7 +8,7 @@ cargo run
 
 ## TODO
 - [ ] Different materials
-    - [ ] Metallic
+    - [x] Metallic
     - [ ] Glossy
     - [ ] Subsurface scatter
 - [ ] Triangles and quads, loading .obj files

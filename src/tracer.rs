@@ -11,7 +11,8 @@ use std::f32::consts::PI;
 
 use crate::{
     dielectric::Dielectric, emissive::Emissive, hit_info::HitInfo, lambertian::Lambertian,
-    material_mgr::MaterialMgr, object::Object, plane::MaterialPlane, sphere::MaterialSphere,
+    material_mgr::MaterialMgr, metallic::Metallic, object::Object, plane::MaterialPlane,
+    sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -133,7 +134,7 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 10;
+        const TILE_SIZE: i32 = 5;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -205,12 +206,12 @@ impl Tracer {
             }),
             Some("dielectric_green"),
         );
-        let dielectric_red = material_mgr.add(
-            Box::new(Dielectric {
-                ior: 1.52,
-                tint: nalgebra_glm::vec3(0.95, 0.9, 0.9),
+        let metallic_red = material_mgr.add(
+            Box::new(Metallic {
+                roughness: 0.01,
+                albedo: nalgebra_glm::vec3(0.9, 0.7, 0.4),
             }),
-            Some("dielectric_red"),
+            Some("metallic_red"),
         );
 
         // Setup objects
@@ -223,7 +224,7 @@ impl Tracer {
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(-2.0, 0.0, -0.0),
                 1.0,
-                dielectric_red,
+                metallic_red,
             )),
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(-0.0, 0.0, 0.0),
