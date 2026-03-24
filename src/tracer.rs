@@ -6,10 +6,12 @@ use apricot::{
     rectangle::Rectangle,
     render_core::TextureId,
 };
+use sdl2::keyboard::Scancode;
+use std::f32::consts::PI;
 
 use crate::{
-    emissive::Emissive, hit_info::HitInfo, lambertian::Lambertian, material_mgr::MaterialMgr,
-    object::Object, plane::MaterialPlane, sphere::MaterialSphere,
+    dielectric::Dielectric, emissive::Emissive, hit_info::HitInfo, lambertian::Lambertian,
+    material_mgr::MaterialMgr, object::Object, plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -23,31 +25,89 @@ pub struct Tracer {
     pixels: Vec<u8>,
     material_mgr: MaterialMgr,
     objects: Vec<Box<dyn Object>>,
+
+    // View stuff
+    facing: f32,
+    pitch: f32,
 }
 
 pub const QUAD_XY_DATA: &[u8] = include_bytes!("../res/quad-xy.obj");
 
 impl Scene for Tracer {
     fn update(&mut self, app: &App) {
-        // Handle mouse + keyboard
+        let curr_w_state = app.keys[Scancode::W as usize];
+        let curr_s_state = app.keys[Scancode::S as usize];
+        let curr_a_state = app.keys[Scancode::A as usize];
+        let curr_d_state = app.keys[Scancode::D as usize];
+        let curr_space_state = app.keys[Scancode::Space as usize];
+        let curr_shift_state = app.keys[Scancode::LShift as usize];
+
+        let up = self.camera.up();
+        let facing_vec = nalgebra_glm::vec3(self.facing.cos(), 0.0, self.facing.sin());
+        let sideways_vec = nalgebra_glm::cross(&up, &facing_vec);
+        let mut player_vel_vec: nalgebra_glm::Vec3 = nalgebra_glm::zero();
+        if curr_w_state {
+            player_vel_vec += facing_vec;
+        }
+        if curr_s_state {
+            player_vel_vec += -facing_vec;
+        }
+        if curr_a_state {
+            player_vel_vec += sideways_vec;
+        }
+        if curr_d_state {
+            player_vel_vec += -sideways_vec;
+        }
+        if curr_space_state {
+            player_vel_vec += up;
+        }
+        if curr_shift_state {
+            player_vel_vec += -up;
+        }
+
+        if player_vel_vec.norm() > 0.0 || app.mouse_vel.norm() > 0.0 {
+            const VIEW_SPEED: f32 = 0.01;
+            const WALK_SPEED: f32 = 0.01;
+            self.facing += VIEW_SPEED * app.mouse_vel.x;
+            self.pitch = (self.pitch + VIEW_SPEED * app.mouse_vel.y)
+                .max(VIEW_SPEED - PI / 2.0)
+                .min(PI / 2.0 - VIEW_SPEED);
+
+            let prev_cam_pos = self.camera.position();
+            let new_cam_pos = prev_cam_pos + player_vel_vec * WALK_SPEED;
+            self.camera.set_position(new_cam_pos);
+
+            let rot_matrix = nalgebra_glm::rotate_y(
+                &nalgebra_glm::rotate_z(&nalgebra_glm::one(), self.facing),
+                self.pitch,
+            );
+            let facing_vec = (rot_matrix * nalgebra_glm::vec4(1.0, 0.0, 0.0, 0.0)).xzy();
+            self.camera.set_lookat(new_cam_pos + facing_vec);
+            self.n = 0;
+        }
     }
 
     fn render(&mut self, app: &App) {
-        self.n += 1;
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let i = y * self.width + x;
-                let ray =
-                    self.camera
-                        .get_ray(x as f32, y as f32, self.width as f32, self.height as f32);
-                let curr_pixel = self.trace(&ray, 0);
-                let prev_pixel = self.image[i];
-                self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
+        for _n in 0..1 {
+            self.n += 1;
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let i = y * self.width + x;
+                    let ray = self.camera.get_ray(
+                        x as f32,
+                        y as f32,
+                        self.width as f32,
+                        self.height as f32,
+                    );
+                    let curr_pixel = self.trace(&ray, 0);
+                    let prev_pixel = self.image[i];
+                    self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
 
-                self.pixels[i * 4 + 0] = (self.image[i].x * 255.0) as u8;
-                self.pixels[i * 4 + 1] = (self.image[i].y * 255.0) as u8;
-                self.pixels[i * 4 + 2] = (self.image[i].z * 255.0) as u8;
-                self.pixels[i * 4 + 3] = 255;
+                    self.pixels[i * 4 + 0] = (self.image[i].x * 255.0) as u8;
+                    self.pixels[i * 4 + 1] = (self.image[i].y * 255.0) as u8;
+                    self.pixels[i * 4 + 2] = (self.image[i].z * 255.0) as u8;
+                    self.pixels[i * 4 + 3] = 255;
+                }
             }
         }
 
@@ -67,7 +127,7 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 10;
+        const TILE_SIZE: i32 = 5;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -83,8 +143,8 @@ impl Tracer {
         app.renderer
             .add_mesh_from_obj(QUAD_XY_DATA, Some("quad-xy"));
 
-        let position = nalgebra_glm::vec3(0.0, 0.5, -5.0);
-        let lookat = nalgebra_glm::vec3(0.0, 0.5, -4.0);
+        let position = nalgebra_glm::vec3(0.0, 0.0, 0.0);
+        let lookat = nalgebra_glm::vec3(-1.0, 0.0, 0.0);
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
 
         let camera = Camera::new(
@@ -109,15 +169,28 @@ impl Tracer {
         let mut material_mgr = MaterialMgr::new();
         let emissive = material_mgr.add(
             Box::new(Emissive {
-                color: nalgebra_glm::vec3(1.0, 1.0, 1.0),
+                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 10.0,
             }),
             Some("emissive"),
         );
-        let lambert = material_mgr.add(
+        let lambert_white = material_mgr.add(
             Box::new(Lambertian {
-                albedo: nalgebra_glm::vec3(1.0, 0.5, 0.0),
+                albedo: nalgebra_glm::vec3(1.0, 1.0, 1.0),
             }),
-            Some("lambertOrange"),
+            Some("lambert_white"),
+        );
+        let lambert_blue = material_mgr.add(
+            Box::new(Lambertian {
+                albedo: nalgebra_glm::vec3(0.0, 0.5, 1.0),
+            }),
+            Some("lambert_blue"),
+        );
+        let dielectric = material_mgr.add(
+            Box::new(Dielectric {
+                ior: 1.52,
+                tint: nalgebra_glm::vec3(0.6, 0.6, 0.6),
+            }),
+            Some("dielectric"),
         );
 
         // Setup objects
@@ -127,10 +200,20 @@ impl Tracer {
                 1.0,
                 emissive,
             )),
+            Box::new(MaterialSphere::new(
+                nalgebra_glm::vec3(2.0, 0.0, 0.0),
+                1.0,
+                dielectric,
+            )),
+            Box::new(MaterialSphere::new(
+                nalgebra_glm::vec3(-2.0, 0.0, 0.0),
+                1.0,
+                dielectric,
+            )),
             Box::new(MaterialPlane::new(
                 nalgebra_glm::vec3(0.0, 1.0, 0.0),
                 0.0,
-                lambert,
+                lambert_white,
             )),
         ];
 
@@ -145,6 +228,8 @@ impl Tracer {
             pixels,
             material_mgr,
             objects,
+            facing: 3.14,
+            pitch: 0.0,
         }
     }
 
