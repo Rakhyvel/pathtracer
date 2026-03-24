@@ -1,20 +1,15 @@
 use apricot::{
     app::{App, Scene},
     camera::{Camera, ProjectionKind},
-    opengl::{Buffer, Texture, Vao, create_program},
+    opengl::{Texture, create_program},
     ray::Ray,
     rectangle::Rectangle,
     render_core::TextureId,
 };
 
 use crate::{
-    emissive::Emissive,
-    hit_info::HitInfo,
-    lambertian::Lambertian,
-    material_mgr::{MaterialId, MaterialMgr},
-    object::Object,
-    plane::MaterialPlane,
-    sphere::MaterialSphere,
+    emissive::Emissive, hit_info::HitInfo, lambertian::Lambertian, material_mgr::MaterialMgr,
+    object::Object, plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {

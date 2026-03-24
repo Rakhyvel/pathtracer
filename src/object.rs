@@ -1,4 +1,4 @@
-use apricot::{plane::Plane, ray::Ray, sphere::Sphere};
+use apricot::ray::Ray;
 
 use crate::hit_info::HitInfo;
 

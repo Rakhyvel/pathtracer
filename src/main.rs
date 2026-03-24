@@ -14,9 +14,6 @@ use std::cell::RefCell;
 use apricot::app::run;
 use tracer::Tracer;
 
-// tracer
-// app
-
 fn main() -> Result<(), String> {
     // Start Apricot's game loop
     run(

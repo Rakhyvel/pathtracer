@@ -14,7 +14,7 @@ impl Material for Emissive {
         self.color
     }
 
-    fn scatter(&self, _ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
+    fn scatter(&self, _ray: &Ray, _hit: &HitInfo) -> Option<ScatterResult> {
         None
     }
 }

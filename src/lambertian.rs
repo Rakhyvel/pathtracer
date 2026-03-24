@@ -4,7 +4,7 @@ use crate::{
 };
 
 use apricot::ray::Ray;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng};
 
 fn random_unit_vector() -> nalgebra_glm::Vec3 {
     let mut rng = rand::rngs::StdRng::from_entropy();

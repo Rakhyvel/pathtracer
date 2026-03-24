@@ -1,5 +1,5 @@
 use apricot::ray::Ray;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 
 use crate::{
     hit_info::HitInfo,
