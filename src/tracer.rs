@@ -67,7 +67,7 @@ impl Scene for Tracer {
 
         if player_vel_vec.norm() > 0.0 || app.mouse_vel.norm() > 0.0 {
             const VIEW_SPEED: f32 = 0.01;
-            const WALK_SPEED: f32 = 0.01;
+            const WALK_SPEED: f32 = 0.04;
             self.facing += VIEW_SPEED * app.mouse_vel.x;
             self.pitch = (self.pitch + VIEW_SPEED * app.mouse_vel.y)
                 .max(VIEW_SPEED - PI / 2.0)
@@ -83,12 +83,12 @@ impl Scene for Tracer {
             );
             let facing_vec = (rot_matrix * nalgebra_glm::vec4(1.0, 0.0, 0.0, 0.0)).xzy();
             self.camera.set_lookat(new_cam_pos + facing_vec);
-            self.n = 0;
+            self.n /= 2;
         }
     }
 
     fn render(&mut self, app: &App) {
-        for _n in 0..1 {
+        for _n in 0..10 {
             self.n += 1;
             for y in 0..self.height {
                 for x in 0..self.width {
@@ -103,9 +103,15 @@ impl Scene for Tracer {
                     let prev_pixel = self.image[i];
                     self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
 
-                    self.pixels[i * 4 + 0] = (self.image[i].x * 255.0) as u8;
-                    self.pixels[i * 4 + 1] = (self.image[i].y * 255.0) as u8;
-                    self.pixels[i * 4 + 2] = (self.image[i].z * 255.0) as u8;
+                    let mut hdr = self.image[i];
+                    let denom = hdr + nalgebra_glm::vec3(1.0, 1.0, 1.0);
+                    hdr.x /= denom.x;
+                    hdr.y /= denom.y;
+                    hdr.z /= denom.z;
+
+                    self.pixels[i * 4 + 0] = (hdr.x * 255.0) as u8;
+                    self.pixels[i * 4 + 1] = (hdr.y * 255.0) as u8;
+                    self.pixels[i * 4 + 2] = (hdr.z * 255.0) as u8;
                     self.pixels[i * 4 + 3] = 255;
                 }
             }
@@ -127,7 +133,7 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 5;
+        const TILE_SIZE: i32 = 10;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -185,34 +191,53 @@ impl Tracer {
             }),
             Some("lambert_blue"),
         );
-        let dielectric = material_mgr.add(
+        let dielectric_blue = material_mgr.add(
             Box::new(Dielectric {
                 ior: 1.52,
-                tint: nalgebra_glm::vec3(0.6, 0.6, 0.6),
+                tint: nalgebra_glm::vec3(0.9, 0.9, 0.95),
             }),
-            Some("dielectric"),
+            Some("dielectric_blue"),
+        );
+        let dielectric_green = material_mgr.add(
+            Box::new(Dielectric {
+                ior: 1.52,
+                tint: nalgebra_glm::vec3(0.9, 0.95, 0.9),
+            }),
+            Some("dielectric_green"),
+        );
+        let dielectric_red = material_mgr.add(
+            Box::new(Dielectric {
+                ior: 1.52,
+                tint: nalgebra_glm::vec3(0.95, 0.9, 0.9),
+            }),
+            Some("dielectric_red"),
         );
 
         // Setup objects
         let objects: Vec<Box<dyn Object>> = vec![
             Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(0.0, 0.0, 0.0),
-                1.0,
+                nalgebra_glm::vec3(40.0, 40.0, 40.0),
+                10.0,
                 emissive,
+            )),
+            Box::new(MaterialSphere::new(
+                nalgebra_glm::vec3(-2.0, 0.0, -0.0),
+                1.0,
+                dielectric_red,
+            )),
+            Box::new(MaterialSphere::new(
+                nalgebra_glm::vec3(-0.0, 0.0, 0.0),
+                1.0,
+                dielectric_green,
             )),
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(2.0, 0.0, 0.0),
                 1.0,
-                dielectric,
-            )),
-            Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(-2.0, 0.0, 0.0),
-                1.0,
-                dielectric,
+                dielectric_blue,
             )),
             Box::new(MaterialPlane::new(
                 nalgebra_glm::vec3(0.0, 1.0, 0.0),
-                0.0,
+                1.0,
                 lambert_white,
             )),
         ];
@@ -241,7 +266,7 @@ impl Tracer {
         let hit = self.cast_ray(ray);
 
         if hit.is_none() {
-            return Self::sky(ray) * 0.1;
+            return Self::sky(ray);
         }
         let hit = hit.unwrap();
 
@@ -277,7 +302,11 @@ impl Tracer {
         closest_hit
     }
 
-    fn sky(_ray: &Ray) -> nalgebra_glm::Vec3 {
-        nalgebra_glm::vec3(0.2, 0.5, 0.8)
+    fn sky(ray: &Ray) -> nalgebra_glm::Vec3 {
+        let d = ray.dir.normalize();
+        let t = 0.5 * (d.y + 1.0);
+        let color =
+            (1.0 - t) * nalgebra_glm::vec3(1.0, 1.0, 1.0) + t * nalgebra_glm::vec3(0.5, 0.7, 1.0);
+        color
     }
 }

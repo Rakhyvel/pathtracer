@@ -11,7 +11,7 @@ mod tracer;
 
 use std::cell::RefCell;
 
-use apricot::app::run;
+use apricot::app::{AppConfig, run};
 use tracer::Tracer;
 
 fn main() -> Result<(), String> {
@@ -19,6 +19,7 @@ fn main() -> Result<(), String> {
     run(
         nalgebra_glm::I32Vec2::new(800, 600),
         "Path Tracer",
+        AppConfig { mouse_warp: true },
         &|app| RefCell::new(Box::new(Tracer::new(app))),
     )
 }
