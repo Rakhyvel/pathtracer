@@ -63,8 +63,10 @@ impl Object for MaterialSphere {
 }
 
 mod tests {
+    #[allow(unused)]
     use apricot::render_core::OpaqueId;
 
+    #[allow(unused)]
     use super::*;
 
     #[test]

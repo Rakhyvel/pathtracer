@@ -5,6 +5,7 @@ mod hit_info;
 mod lambertian;
 mod material;
 mod material_mgr;
+mod mesh;
 mod metallic;
 mod object;
 mod plane;

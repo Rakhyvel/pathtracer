@@ -74,7 +74,7 @@ dependencies = [
 [[package]]
 name = "apricot"
 version = "0.1.0"
-source = "git+https://github.com/Rakhyvel/apricot.git#a59aa655858b65c42b86ab8130d03971745a2d21"
+source = "git+https://github.com/Rakhyvel/apricot.git#590cecd7396fb3206a98d97cfd5e46d3e6cc070f"
 dependencies = [
  "chrono",
  "gl",
@@ -1001,6 +1001,7 @@ dependencies = [
  "apricot",
  "gl",
  "nalgebra-glm",
+ "obj-rs",
  "rand 0.8.5",
  "sdl2",
 ]

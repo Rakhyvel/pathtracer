@@ -4,7 +4,7 @@ use crate::{
 };
 
 use apricot::ray::Ray;
-use rand::{Rng, SeedableRng, thread_rng};
+use rand::thread_rng;
 
 pub struct Lambertian {
     pub albedo: nalgebra_glm::Vec3,

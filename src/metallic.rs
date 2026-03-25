@@ -1,5 +1,3 @@
-use std::f32::EPSILON;
-
 use apricot::ray::Ray;
 
 use crate::{

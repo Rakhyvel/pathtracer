@@ -47,8 +47,10 @@ impl Object for MaterialPlane {
 }
 
 mod tests {
+    #[allow(unused)]
     use apricot::render_core::OpaqueId;
 
+    #[allow(unused)]
     use super::*;
 
     #[test]

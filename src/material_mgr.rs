@@ -43,8 +43,4 @@ impl MaterialMgr {
     pub fn get_from_id(&self, id: MaterialId) -> Option<&dyn Material> {
         self.materials.get(id.as_usize()).map(|b| b.as_ref())
     }
-
-    pub fn get_id_from_name(&self, name: &str) -> Option<MaterialId> {
-        self.keys.get(name).copied()
-    }
 }

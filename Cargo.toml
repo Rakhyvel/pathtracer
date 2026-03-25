@@ -9,3 +9,4 @@ sdl2 = { version = "0.34.5", features = ["bundled", "ttf", "mixer"], default-fea
 apricot = { git = "https://github.com/Rakhyvel/apricot.git" }
 rand = "0.8.4"
 gl = "*"
+obj-rs = "*"

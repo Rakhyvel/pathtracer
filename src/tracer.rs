@@ -4,7 +4,7 @@ use apricot::{
     opengl::{Texture, create_program},
     ray::Ray,
     rectangle::Rectangle,
-    render_core::TextureId,
+    render_core::{Mesh, TextureId},
 };
 use rand::Rng;
 use sdl2::keyboard::Scancode;
@@ -12,8 +12,8 @@ use std::f32::consts::PI;
 
 use crate::{
     dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
-    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::Object,
-    plane::MaterialPlane, sphere::MaterialSphere,
+    lambertian::Lambertian, material_mgr::MaterialMgr, mesh::MaterialMesh, metallic::Metallic,
+    object::Object, plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -34,6 +34,8 @@ pub struct Tracer {
 }
 
 pub const QUAD_XY_DATA: &[u8] = include_bytes!("../res/quad-xy.obj");
+pub const ICO_DATA: &[u8] = include_bytes!("../res/ico-sphere.obj");
+pub const CUBE_DATA: &[u8] = include_bytes!("../res/cube.obj");
 
 impl Scene for Tracer {
     fn update(&mut self, app: &App) {
@@ -91,7 +93,7 @@ impl Scene for Tracer {
 
     fn render(&mut self, app: &App) {
         let mut rng = rand::thread_rng();
-        for _n in 0..30 {
+        for _n in 0..10 {
             self.n += 1;
             for y in 0..self.height {
                 for x in 0..self.width {
@@ -104,7 +106,8 @@ impl Scene for Tracer {
                         self.width as f32,
                         self.height as f32,
                     );
-                    let curr_pixel = self.trace(&ray, 0);
+                    let curr_pixel =
+                        self.trace(&ray, 0, &mut nalgebra_glm::Vec3::new(1.0, 1.0, 1.0));
                     let prev_pixel = self.image[i];
                     self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
 
@@ -138,7 +141,7 @@ impl Scene for Tracer {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 10;
+        const TILE_SIZE: i32 = 5;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -180,7 +183,7 @@ impl Tracer {
         let mut material_mgr = MaterialMgr::new();
         let emissive = material_mgr.add(
             Box::new(Emissive {
-                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 10.0,
+                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 100.0,
             }),
             Some("emissive"),
         );
@@ -199,7 +202,7 @@ impl Tracer {
         let dielectric_blue = material_mgr.add(
             Box::new(Dielectric {
                 ior: 1.52,
-                tint: nalgebra_glm::vec3(0.4, 0.7, 0.9),
+                tint: nalgebra_glm::vec3(0.63, 0.83, 0.94),
             }),
             Some("dielectric_blue"),
         );
@@ -228,29 +231,34 @@ impl Tracer {
         // Setup objects
         let objects: Vec<Box<dyn Object>> = vec![
             Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(4.0, 4.0, 4.0),
-                0.1,
+                nalgebra_glm::vec3(40.0, 2.0, 40.0),
+                1.0,
                 emissive,
             )),
-            Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(-2.0, 0.0, -0.0),
-                1.0,
-                metallic_red,
-            )),
-            Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(-0.0, 0.0, 0.0),
-                1.0,
-                glossy,
-            )),
-            Box::new(MaterialSphere::new(
-                nalgebra_glm::vec3(2.0, 0.0, 0.0),
-                1.0,
-                dielectric_blue,
-            )),
+            // Box::new(MaterialSphere::new(
+            //     nalgebra_glm::vec3(-2.0, 0.0, -0.0),
+            //     1.0,
+            //     metallic_red,
+            // )),
+            // Box::new(MaterialSphere::new(
+            //     nalgebra_glm::vec3(-0.0, 0.0, 0.0),
+            //     1.0,
+            //     glossy,
+            // )),
+            // Box::new(MaterialSphere::new(
+            //     nalgebra_glm::vec3(2.0, 0.0, 0.0),
+            //     1.0,
+            //     dielectric_blue,
+            // )),
             Box::new(MaterialPlane::new(
                 nalgebra_glm::vec3(0.0, 1.0, 0.0),
                 1.0,
                 lambert_white,
+            )),
+            Box::new(MaterialMesh::new(
+                CUBE_DATA,
+                glossy,
+                nalgebra_glm::translation(&nalgebra_glm::vec3(0.5, 0.0, 0.0)),
             )),
         ];
 
@@ -270,15 +278,29 @@ impl Tracer {
         }
     }
 
-    fn trace(&self, ray: &Ray, depth: i32) -> nalgebra_glm::Vec3 {
+    fn trace(
+        &self,
+        ray: &Ray,
+        depth: i32,
+        throughput: &mut nalgebra_glm::Vec3,
+    ) -> nalgebra_glm::Vec3 {
         if depth > 100 {
-            return nalgebra_glm::zero();
+            return nalgebra_glm::Vec3::zeros();
+        }
+        if depth > 3 {
+            let luminance = 0.2126 * throughput.x + 0.7152 * throughput.y + 0.0722 * throughput.z;
+            let survive_prob = luminance.clamp(0.05, 1.0);
+            let mut rng = rand::thread_rng();
+            if rng.r#gen::<f32>() > survive_prob {
+                return nalgebra_glm::Vec3::zeros();
+            }
+            *throughput /= survive_prob;
         }
 
         let hit = self.cast_ray(ray);
 
         if hit.is_none() {
-            return Self::sky(ray);
+            return Self::sky(ray) * 0.0;
         }
         let hit = hit.unwrap();
 
@@ -289,7 +311,9 @@ impl Tracer {
         match hit_material.scatter(ray, &hit) {
             None => emitted,
             Some(scatter) => {
-                let incoming = self.trace(&scatter.ray, depth + 1);
+                let mut next_throughput: nalgebra_glm::Vec3 =
+                    throughput.component_mul(&scatter.attenuation);
+                let incoming = self.trace(&scatter.ray, depth + 1, &mut next_throughput);
                 emitted + scatter.attenuation.component_mul(&incoming)
             }
         }
