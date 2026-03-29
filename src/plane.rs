@@ -19,22 +19,22 @@ impl MaterialPlane {
 
 impl Object for MaterialPlane {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
-        let denom = self.plane.normal().dot(&ray.dir);
+        let denom = self.plane.normal().dot(&ray.dir());
         if denom.abs() < EPS {
             // parellel
             return None;
         }
 
-        let t = -(self.plane.normal().dot(&ray.origin) + self.plane.dist) / denom;
+        let t = -(self.plane.normal().dot(&ray.origin()) + self.plane.dist) / denom;
 
         if t < 0.0 {
             return None; // intersection behind ray origin
         }
 
-        let point = ray.origin + ray.dir * t;
+        let point = ray.origin() + ray.dir() * t;
 
         let outward = self.plane.normal();
-        let front_face = ray.dir.dot(&outward) < 0.0;
+        let front_face = ray.dir().dot(&outward) < 0.0;
         let normal = if front_face { outward } else { -outward };
 
         Some(HitInfo {
@@ -62,10 +62,10 @@ mod tests {
             ),
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, 3.0),
-            dir: nalgebra_glm::vec3(0.0, 0.0, -1.0).normalize(),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, 3.0),
+            nalgebra_glm::vec3(0.0, 0.0, -1.0).normalize(),
+        );
 
         let hit = plane.intersect(&ray).expect("Ray should hit plane");
         assert!((hit.point - nalgebra_glm::vec3(0.0, 0.0, 0.0)).magnitude() < EPS);
@@ -82,10 +82,10 @@ mod tests {
             ),
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, -3.0),
-            dir: nalgebra_glm::vec3(0.0, 0.0, 1.0).normalize(),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, -3.0),
+            nalgebra_glm::vec3(0.0, 0.0, 1.0).normalize(),
+        );
 
         let hit = plane.intersect(&ray).expect("Ray should hit plane");
         assert!((hit.point - nalgebra_glm::vec3(0.0, 0.0, 0.0)).magnitude() < EPS);
@@ -102,10 +102,10 @@ mod tests {
             ),
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, -3.0),
-            dir: nalgebra_glm::vec3(1.0, 0.0, 0.0).normalize(),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, -3.0),
+            nalgebra_glm::vec3(1.0, 0.0, 0.0).normalize(),
+        );
 
         assert!(plane.intersect(&ray).is_none());
     }

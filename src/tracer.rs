@@ -6,14 +6,24 @@ use apricot::{
     rectangle::Rectangle,
     render_core::{Mesh, TextureId},
 };
+use obj::raw::object;
 use rand::Rng;
+use rayon::prelude::*;
 use sdl2::keyboard::Scancode;
 use std::f32::consts::PI;
 
 use crate::{
-    dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
-    lambertian::Lambertian, material_mgr::MaterialMgr, mesh::MaterialMesh, metallic::Metallic,
-    object::Object, plane::MaterialPlane, sphere::MaterialSphere,
+    dielectric::Dielectric,
+    emissive::Emissive,
+    glossy::Glossy,
+    hit_info::HitInfo,
+    lambertian::Lambertian,
+    material_mgr::{self, MaterialMgr},
+    mesh::MaterialMesh,
+    metallic::Metallic,
+    object::Object,
+    plane::MaterialPlane,
+    sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -92,38 +102,50 @@ impl Scene for Tracer {
     }
 
     fn render(&mut self, app: &App) {
-        let mut rng = rand::thread_rng();
-        for _n in 0..10 {
+        let width = self.width;
+        let height = self.height;
+        let n = {
             self.n += 1;
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
-                    let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
-                    let i = y * self.width + x;
-                    let ray = self.camera.get_ray(
-                        jitter_x,
-                        jitter_y,
-                        self.width as f32,
-                        self.height as f32,
-                    );
-                    let curr_pixel =
-                        self.trace(&ray, 0, &mut nalgebra_glm::Vec3::new(1.0, 1.0, 1.0));
-                    let prev_pixel = self.image[i];
-                    self.image[i] += (curr_pixel - prev_pixel) / (self.n as f32);
+            self.n
+        };
+        let objects = &self.objects;
+        let material_mgr = &self.material_mgr;
 
-                    let mut hdr = self.image[i];
-                    let denom = hdr + nalgebra_glm::vec3(1.0, 1.0, 1.0);
-                    hdr.x /= denom.x;
-                    hdr.y /= denom.y;
-                    hdr.z /= denom.z;
+        self.image
+            .par_iter_mut()
+            .zip(self.pixels.par_chunks_mut(4))
+            .enumerate()
+            .for_each(|(i, (image_pixel, pixel_out))| {
+                let mut rng = rand::thread_rng();
+                let x = i % width;
+                let y = i / width;
 
-                    self.pixels[i * 4 + 0] = (hdr.x * 255.0) as u8;
-                    self.pixels[i * 4 + 1] = (hdr.y * 255.0) as u8;
-                    self.pixels[i * 4 + 2] = (hdr.z * 255.0) as u8;
-                    self.pixels[i * 4 + 3] = 255;
-                }
-            }
-        }
+                let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
+                let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
+                let ray = self
+                    .camera
+                    .get_ray(jitter_x, jitter_y, width as f32, height as f32);
+
+                let curr_pixel = trace(
+                    &ray,
+                    0,
+                    &mut nalgebra_glm::Vec3::new(1.0, 1.0, 1.0),
+                    objects,
+                    material_mgr,
+                );
+                *image_pixel += (curr_pixel - *image_pixel) / n as f32;
+
+                let mut hdr = *image_pixel;
+                let denom = hdr + nalgebra_glm::vec3(1.0, 1.0, 1.0);
+                hdr.x /= denom.x;
+                hdr.y /= denom.y;
+                hdr.z /= denom.z;
+
+                pixel_out[0] = (hdr.x * 255.0) as u8;
+                pixel_out[1] = (hdr.y * 255.0) as u8;
+                pixel_out[2] = (hdr.z * 255.0) as u8;
+                pixel_out[3] = 255;
+            });
 
         let texture = app.renderer.get_texture_from_id(self.texture_id).unwrap();
         texture.set_pixels(self.width as i32, self.height as i32, &self.pixels);
@@ -256,7 +278,7 @@ impl Tracer {
                 lambert_white,
             )),
             Box::new(MaterialMesh::new(
-                CUBE_DATA,
+                ICO_DATA,
                 glossy,
                 nalgebra_glm::translation(&nalgebra_glm::vec3(0.5, 0.0, 0.0)),
             )),
@@ -277,72 +299,79 @@ impl Tracer {
             pitch: 0.0,
         }
     }
+}
 
-    fn trace(
-        &self,
-        ray: &Ray,
-        depth: i32,
-        throughput: &mut nalgebra_glm::Vec3,
-    ) -> nalgebra_glm::Vec3 {
-        if depth > 100 {
+fn trace(
+    ray: &Ray,
+    depth: i32,
+    throughput: &mut nalgebra_glm::Vec3,
+    objects: &[Box<dyn Object>],
+    material_mgr: &MaterialMgr,
+) -> nalgebra_glm::Vec3 {
+    if depth > 100 {
+        return nalgebra_glm::Vec3::zeros();
+    }
+    if depth > 3 {
+        let luminance = 0.2126 * throughput.x + 0.7152 * throughput.y + 0.0722 * throughput.z;
+        let survive_prob = luminance.clamp(0.05, 1.0);
+        let mut rng = rand::thread_rng();
+        if rng.r#gen::<f32>() > survive_prob {
             return nalgebra_glm::Vec3::zeros();
         }
-        if depth > 3 {
-            let luminance = 0.2126 * throughput.x + 0.7152 * throughput.y + 0.0722 * throughput.z;
-            let survive_prob = luminance.clamp(0.05, 1.0);
-            let mut rng = rand::thread_rng();
-            if rng.r#gen::<f32>() > survive_prob {
-                return nalgebra_glm::Vec3::zeros();
-            }
-            *throughput /= survive_prob;
-        }
-
-        let hit = self.cast_ray(ray);
-
-        if hit.is_none() {
-            return Self::sky(ray) * 0.0;
-        }
-        let hit = hit.unwrap();
-
-        let hit_material = self.material_mgr.get_from_id(hit.material).unwrap();
-
-        let emitted = hit_material.emission();
-
-        match hit_material.scatter(ray, &hit) {
-            None => emitted,
-            Some(scatter) => {
-                let mut next_throughput: nalgebra_glm::Vec3 =
-                    throughput.component_mul(&scatter.attenuation);
-                let incoming = self.trace(&scatter.ray, depth + 1, &mut next_throughput);
-                emitted + scatter.attenuation.component_mul(&incoming)
-            }
-        }
+        *throughput /= survive_prob;
     }
 
-    fn cast_ray(&self, ray: &Ray) -> Option<HitInfo> {
-        let mut closest_hit: Option<HitInfo> = None;
+    let hit = cast_ray(ray, objects);
 
-        for obj in &self.objects {
-            if let Some(hit) = obj.intersect(ray) {
-                match &closest_hit {
-                    Some(existing_hit) => {
-                        if hit.depth < existing_hit.depth {
-                            closest_hit = Some(hit)
-                        }
+    if hit.is_none() {
+        return sky(ray) * 0.0;
+    }
+    let hit = hit.unwrap();
+
+    let hit_material = material_mgr.get_from_id(hit.material).unwrap();
+
+    let emitted = hit_material.emission();
+
+    match hit_material.scatter(ray, &hit) {
+        None => emitted,
+        Some(scatter) => {
+            let mut next_throughput: nalgebra_glm::Vec3 =
+                throughput.component_mul(&scatter.attenuation);
+            let incoming = trace(
+                &scatter.ray,
+                depth + 1,
+                &mut next_throughput,
+                objects,
+                material_mgr,
+            );
+            emitted + scatter.attenuation.component_mul(&incoming)
+        }
+    }
+}
+
+fn cast_ray(ray: &Ray, objects: &[Box<dyn Object>]) -> Option<HitInfo> {
+    let mut closest_hit: Option<HitInfo> = None;
+
+    for obj in objects {
+        if let Some(hit) = obj.intersect(ray) {
+            match &closest_hit {
+                Some(existing_hit) => {
+                    if hit.depth < existing_hit.depth {
+                        closest_hit = Some(hit)
                     }
-                    None => closest_hit = Some(hit),
                 }
+                None => closest_hit = Some(hit),
             }
         }
-
-        closest_hit
     }
 
-    fn sky(ray: &Ray) -> nalgebra_glm::Vec3 {
-        let d = ray.dir.normalize();
-        let t = 0.5 * (d.y + 1.0);
-        let color =
-            (1.0 - t) * nalgebra_glm::vec3(1.0, 1.0, 1.0) + t * nalgebra_glm::vec3(0.5, 0.7, 1.0);
-        color
-    }
+    closest_hit
+}
+
+fn sky(ray: &Ray) -> nalgebra_glm::Vec3 {
+    let d = ray.dir().normalize();
+    let t = 0.5 * (d.y + 1.0);
+    let color =
+        (1.0 - t) * nalgebra_glm::vec3(1.0, 1.0, 1.0) + t * nalgebra_glm::vec3(0.5, 0.7, 1.0);
+    color
 }

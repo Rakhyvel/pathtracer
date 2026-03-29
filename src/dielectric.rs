@@ -15,7 +15,7 @@ const EPS: f32 = 1e-4;
 
 impl Material for Dielectric {
     fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
-        let i = ray.dir.normalize();
+        let i = ray.dir().normalize();
         let n = hit.normal;
 
         let reflect_dir = i - 2.0 * i.dot(&n) * n;
@@ -28,18 +28,12 @@ impl Material for Dielectric {
 
         if choose_reflect {
             Some(ScatterResult {
-                ray: Ray {
-                    origin: hit.point + n * EPS,
-                    dir: reflect_dir,
-                },
+                ray: Ray::new(hit.point + n * EPS, reflect_dir),
                 attenuation: nalgebra_glm::vec3(1.0, 1.0, 1.0),
             })
         } else {
             Some(ScatterResult {
-                ray: Ray {
-                    origin: hit.point - n * EPS,
-                    dir: refract_dir,
-                },
+                ray: Ray::new(hit.point - n * EPS, refract_dir),
                 attenuation: self.tint,
             })
         }

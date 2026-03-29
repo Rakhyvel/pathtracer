@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::hit_info::HitInfo;
 
-pub trait Material {
+pub trait Material: Send + Sync {
     fn emission(&self) -> nalgebra_glm::Vec3 {
         return nalgebra_glm::vec3(0.0, 0.0, 0.0);
     }

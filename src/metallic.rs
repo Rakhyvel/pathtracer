@@ -14,7 +14,7 @@ const EPS: f32 = 1e-4;
 
 impl Material for Metallic {
     fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
-        let i = ray.dir.normalize();
+        let i = ray.dir().normalize();
         let n = hit.normal;
 
         let reflect_dir = i - 2.0 * i.dot(&n) * n;
@@ -30,10 +30,7 @@ impl Material for Metallic {
         }
 
         Some(ScatterResult {
-            ray: Ray {
-                origin: hit.point + n * EPS,
-                dir: scattered,
-            },
+            ray: Ray::new(hit.point + n * EPS, scattered),
             attenuation: self.albedo,
         })
     }

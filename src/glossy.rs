@@ -16,7 +16,7 @@ const IOR: f32 = 1.6;
 
 impl Material for Glossy {
     fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
-        let i = ray.dir.normalize();
+        let i = ray.dir().normalize();
         let n = hit.normal;
 
         let mut rng = rand::thread_rng();
@@ -37,18 +37,12 @@ impl Material for Glossy {
 
         if choose_reflect {
             Some(ScatterResult {
-                ray: Ray {
-                    origin: hit.point + n * EPS,
-                    dir: scattered,
-                },
+                ray: Ray::new(hit.point + n * EPS, scattered),
                 attenuation: nalgebra_glm::vec3(1.0, 1.0, 1.0),
             })
         } else {
             Some(ScatterResult {
-                ray: Ray {
-                    origin: hit.point + n * EPS,
-                    dir: diffuse,
-                },
+                ray: Ray::new(hit.point + n * EPS, diffuse),
                 attenuation: self.albedo,
             })
         }

@@ -22,10 +22,7 @@ impl Material for Lambertian {
         }
 
         Some(ScatterResult {
-            ray: Ray {
-                origin: hit.point + hit.normal * EPS,
-                dir,
-            },
+            ray: Ray::new(hit.point + hit.normal * EPS, dir),
             attenuation: self.albedo,
         })
     }

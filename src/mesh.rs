@@ -23,7 +23,7 @@ impl MaterialMesh {
         let inv_model_matrix = nalgebra_glm::inverse(&model_matrix);
         let normal_matrix = nalgebra_glm::inverse_transpose(model_matrix);
         Self {
-            triangles: TriangleSoup::from_obj(obj_file_data, model_matrix),
+            triangles: TriangleSoup::from_obj(obj_file_data),
             mat_id,
             model_matrix,
             inv_model_matrix,
@@ -32,10 +32,10 @@ impl MaterialMesh {
     }
 
     fn intersect_triangle(&self, ray: &Ray, tri: &Tri) -> Option<HitInfo> {
-        let e1 = tri.v1 - tri.v0;
-        let e2 = tri.v2 - tri.v0;
+        let e1 = tri.v1() - tri.v0();
+        let e2 = tri.v2() - tri.v0();
 
-        let h = ray.dir.cross(&e2);
+        let h = ray.dir().cross(&e2);
         let det = e1.dot(&h);
 
         // Ray parallel to triangle
@@ -44,7 +44,7 @@ impl MaterialMesh {
         }
 
         let inv_det = 1.0 / det;
-        let s = ray.origin - tri.v0;
+        let s = ray.origin() - tri.v0();
         let u = inv_det * s.dot(&h);
         // didn't know you could do this!
         if !(0.0..=1.0).contains(&u) {
@@ -52,7 +52,7 @@ impl MaterialMesh {
         }
 
         let q = s.cross(&e1);
-        let v = inv_det * ray.dir.dot(&q);
+        let v = inv_det * ray.dir().dot(&q);
         if v < 0.0 || u + v > 1.0 {
             return None;
         }
@@ -64,7 +64,7 @@ impl MaterialMesh {
 
         let point = ray.at(t);
         let outward = e1.cross(&e2).normalize();
-        let front_face = ray.dir.dot(&outward) < 0.0;
+        let front_face = ray.dir().dot(&outward) < 0.0;
         let normal = if front_face { outward } else { -outward };
 
         Some(HitInfo {
@@ -78,14 +78,14 @@ impl MaterialMesh {
 
 impl Object for MaterialMesh {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
-        let local_ray = Ray {
-            origin: (self.inv_model_matrix * ray.origin.push(1.0)).xyz(),
-            dir: (self.inv_model_matrix * ray.dir.push(0.0)).xyz(),
-        };
+        let local_ray = Ray::new(
+            (self.inv_model_matrix * ray.origin().push(1.0)).xyz(),
+            (self.inv_model_matrix * ray.dir().push(0.0)).xyz(),
+        );
 
         self.triangles
             .bvh
-            .iter_ray(ray)
+            .iter_ray(&local_ray)
             .filter_map(|tri| self.intersect_triangle(&local_ray, &tri))
             .min_by(|a, b| a.depth.partial_cmp(&b.depth).unwrap())
             .map(|hit| HitInfo {
@@ -100,7 +100,7 @@ impl Object for MaterialMesh {
 }
 
 impl TriangleSoup {
-    pub fn from_obj(obj_file_data: &[u8], model_matrix: nalgebra_glm::Mat4) -> Self {
+    pub fn from_obj(obj_file_data: &[u8]) -> Self {
         let obj: Obj<TexturedVertex> = load_obj(obj_file_data).unwrap();
         let verts = flatten_positions(&obj.vertices);
         let indices = vec_u32_from_vec_u16(&obj.indices);
@@ -113,15 +113,15 @@ impl TriangleSoup {
                 tri_indices[1] as usize,
                 tri_indices[2] as usize,
             );
-            let tri = Tri {
-                v0: nalgebra_glm::vec3(verts[i0 * 3], verts[i0 * 3 + 1], verts[i0 * 3 + 2]),
-                v1: nalgebra_glm::vec3(verts[i1 * 3], verts[i1 * 3 + 1], verts[i1 * 3 + 2]),
-                v2: nalgebra_glm::vec3(verts[i2 * 3], verts[i2 * 3 + 1], verts[i2 * 3 + 2]),
-            };
+            let tri = Tri::new(
+                nalgebra_glm::vec3(verts[i0 * 3], verts[i0 * 3 + 1], verts[i0 * 3 + 2]),
+                nalgebra_glm::vec3(verts[i1 * 3], verts[i1 * 3 + 1], verts[i1 * 3 + 2]),
+                nalgebra_glm::vec3(verts[i2 * 3], verts[i2 * 3 + 1], verts[i2 * 3 + 2]),
+            );
             let aabb = AABB::from_points(vec![
-                (model_matrix * tri.v0.push(1.0)).xyz(),
-                (model_matrix * tri.v1.push(1.0)).xyz(),
-                (model_matrix * tri.v2.push(1.0)).xyz(),
+                (tri.v0().push(1.0)).xyz(),
+                (tri.v1().push(1.0)).xyz(),
+                (tri.v2().push(1.0)).xyz(),
             ]);
             bvh.insert(tri, aabb);
         }

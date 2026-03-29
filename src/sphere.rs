@@ -20,8 +20,8 @@ impl MaterialSphere {
 
 impl Object for MaterialSphere {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
-        let m: nalgebra_glm::Vec3 = ray.origin - self.sphere.center;
-        let b = m.dot(&ray.dir);
+        let m: nalgebra_glm::Vec3 = ray.origin() - self.sphere.center;
+        let b = m.dot(&ray.dir());
         let c = m.dot(&m) - self.sphere.radius * self.sphere.radius;
 
         // ray outside sphere and pointing away
@@ -50,7 +50,7 @@ impl Object for MaterialSphere {
         let point = ray.at(t);
 
         let outward = (point - self.sphere.center).normalize();
-        let front_face = ray.dir.dot(&outward) < 0.0;
+        let front_face = ray.dir().dot(&outward) < 0.0;
         let normal = if front_face { outward } else { -outward };
 
         Some(HitInfo {
@@ -78,10 +78,10 @@ mod tests {
             },
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, -3.0),
-            dir: nalgebra_glm::vec3(0.0, 0.0, 1.0),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, -3.0),
+            nalgebra_glm::vec3(0.0, 0.0, 1.0),
+        );
 
         let hit = sphere.intersect(&ray).expect("Ray should hit sphere");
         assert!((hit.point - nalgebra_glm::vec3(0.0, 0.0, -1.0)).magnitude() < EPS);
@@ -98,10 +98,10 @@ mod tests {
             },
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, -3.0),
-            dir: nalgebra_glm::vec3(0.0, 1.0, 0.0).normalize(),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, -3.0),
+            nalgebra_glm::vec3(0.0, 1.0, 0.0).normalize(),
+        );
 
         assert!(sphere.intersect(&ray).is_none());
     }
@@ -115,10 +115,10 @@ mod tests {
             },
             mat_id: MaterialId::new(0),
         };
-        let ray = Ray {
-            origin: nalgebra_glm::vec3(0.0, 0.0, 0.0),
-            dir: nalgebra_glm::vec3(0.0, 0.0, 1.0).normalize(),
-        };
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, 0.0),
+            nalgebra_glm::vec3(0.0, 0.0, 1.0).normalize(),
+        );
 
         let hit = sphere.intersect(&ray).expect("Ray should hit sphere");
         assert!((hit.point - nalgebra_glm::vec3(0.0, 0.0, 1.0)).magnitude() < EPS);
