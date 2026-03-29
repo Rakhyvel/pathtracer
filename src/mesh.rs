@@ -6,28 +6,19 @@ use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
 pub struct MaterialMesh {
     triangles: TriangleSoup,
     mat_id: MaterialId,
-    model_matrix: nalgebra_glm::Mat4,
-    // Cached at construction, never recomputed
-    inv_model_matrix: nalgebra_glm::Mat4,
-    normal_matrix: nalgebra_glm::Mat4,
 }
 
 struct TriangleSoup {
-    pub bvh: BVH<Tri>,
+    pub triangles: Vec<Tri>,
 }
 
 const EPS: f32 = 1e-4;
 
 impl MaterialMesh {
     pub fn new(obj_file_data: &[u8], mat_id: MaterialId, model_matrix: nalgebra_glm::Mat4) -> Self {
-        let inv_model_matrix = nalgebra_glm::inverse(&model_matrix);
-        let normal_matrix = nalgebra_glm::inverse_transpose(model_matrix);
         Self {
-            triangles: TriangleSoup::from_obj(obj_file_data),
+            triangles: TriangleSoup::from_obj(obj_file_data, model_matrix),
             mat_id,
-            model_matrix,
-            inv_model_matrix,
-            normal_matrix,
         }
     }
 
@@ -63,7 +54,7 @@ impl MaterialMesh {
         }
 
         let point = ray.at(t);
-        let outward = e1.cross(&e2).normalize();
+        let outward = tri.normal();
         let front_face = ray.dir().dot(&outward) < 0.0;
         let normal = if front_face { outward } else { -outward };
 
@@ -78,34 +69,23 @@ impl MaterialMesh {
 
 impl Object for MaterialMesh {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
-        let local_ray = Ray::new(
-            (self.inv_model_matrix * ray.origin().push(1.0)).xyz(),
-            (self.inv_model_matrix * ray.dir().push(0.0)).xyz(),
-        );
-
         self.triangles
-            .bvh
-            .iter_ray(&local_ray)
-            .filter_map(|tri| self.intersect_triangle(&local_ray, &tri))
+            .triangles
+            .iter()
+            .filter_map(|tri| self.intersect_triangle(ray, tri))
             .min_by(|a, b| a.depth.partial_cmp(&b.depth).unwrap())
-            .map(|hit| HitInfo {
-                point: (self.model_matrix * hit.point.push(1.0)).xyz(),
-                normal: (self.normal_matrix * hit.normal.push(0.0))
-                    .xyz()
-                    .normalize(),
-                depth: hit.depth,
-                material: hit.material,
-            })
     }
 }
 
 impl TriangleSoup {
-    pub fn from_obj(obj_file_data: &[u8]) -> Self {
+    pub fn from_obj(obj_file_data: &[u8], model_matrix: nalgebra_glm::Mat4) -> Self {
         let obj: Obj<TexturedVertex> = load_obj(obj_file_data).unwrap();
         let verts = flatten_positions(&obj.vertices);
         let indices = vec_u32_from_vec_u16(&obj.indices);
 
-        let mut bvh = BVH::new();
+        let transform_point = |p: nalgebra_glm::Vec3| (model_matrix * p.push(1.0)).xyz();
+
+        let mut triangles = Vec::new();
 
         for tri_indices in indices.chunks(3) {
             let (i0, i1, i2) = (
@@ -113,20 +93,28 @@ impl TriangleSoup {
                 tri_indices[1] as usize,
                 tri_indices[2] as usize,
             );
-            let tri = Tri::new(
-                nalgebra_glm::vec3(verts[i0 * 3], verts[i0 * 3 + 1], verts[i0 * 3 + 2]),
-                nalgebra_glm::vec3(verts[i1 * 3], verts[i1 * 3 + 1], verts[i1 * 3 + 2]),
-                nalgebra_glm::vec3(verts[i2 * 3], verts[i2 * 3 + 1], verts[i2 * 3 + 2]),
-            );
-            let aabb = AABB::from_points(vec![
-                (tri.v0().push(1.0)).xyz(),
-                (tri.v1().push(1.0)).xyz(),
-                (tri.v2().push(1.0)).xyz(),
-            ]);
-            bvh.insert(tri, aabb);
+
+            let v0 = transform_point(nalgebra_glm::vec3(
+                verts[i0 * 3],
+                verts[i0 * 3 + 1],
+                verts[i0 * 3 + 2],
+            ));
+            let v1 = transform_point(nalgebra_glm::vec3(
+                verts[i1 * 3],
+                verts[i1 * 3 + 1],
+                verts[i1 * 3 + 2],
+            ));
+            let v2 = transform_point(nalgebra_glm::vec3(
+                verts[i2 * 3],
+                verts[i2 * 3 + 1],
+                verts[i2 * 3 + 2],
+            ));
+
+            let tri = Tri::new(v0, v1, v2);
+            triangles.push(tri);
         }
 
-        Self { bvh }
+        Self { triangles }
     }
 }
 

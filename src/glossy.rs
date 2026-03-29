@@ -12,7 +12,7 @@ pub struct Glossy {
 }
 
 const EPS: f32 = 1e-4;
-const IOR: f32 = 1.6;
+const IOR: f32 = 1.5;
 
 impl Material for Glossy {
     fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
@@ -20,22 +20,24 @@ impl Material for Glossy {
         let n = hit.normal;
 
         let mut rng = rand::thread_rng();
-        let reflect_dir = i - 2.0 * i.dot(&n) * n;
-        let scattered = reflect_dir + random_unit_vector(&mut rng) * self.roughness;
-        if scattered.dot(&n) <= 0.0 {
-            return None;
-        }
-        let diffuse = n + random_unit_vector(&mut rng).normalize();
 
-        let cosi = -i.dot(&n).clamp(-1.0, 1.0);
-
-        let r0 = ((1.0 - IOR) / (1.0 + IOR)).powf(2.0); // ≈ 0.04, typical for plastic
+        // Fresnel
+        let cosi = (-i.dot(&n)).max(0.0);
+        let r0 = ((1.0 - IOR) / (1.0 + IOR)).powf(2.0); // ~ 0.04, typical for plastic
         let fresnel = r0 + (1.0 - r0) * (1.0 - cosi).powf(5.0);
 
-        let r: f32 = rng.gen_range(0.0..1.0);
-        let choose_reflect = r < fresnel;
+        // Spectral
+        let reflect_dir = i - 2.0 * i.dot(&n) * n;
+        let mut scattered =
+            (reflect_dir + random_unit_vector(&mut rng) * self.roughness).normalize();
+        if scattered.dot(&n) <= 0.0 {
+            scattered = reflect_dir;
+        }
 
-        if choose_reflect {
+        // Diffuse
+        let diffuse = (n + random_unit_vector(&mut rng)).normalize();
+
+        if rng.r#gen::<f32>() < fresnel {
             Some(ScatterResult {
                 ray: Ray::new(hit.point + n * EPS, scattered),
                 attenuation: nalgebra_glm::vec3(1.0, 1.0, 1.0),

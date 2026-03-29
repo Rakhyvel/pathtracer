@@ -7,7 +7,7 @@ pub struct MaterialSphere {
     mat_id: MaterialId,
 }
 
-const EPS: f32 = 1e-5;
+const EPS: f32 = 1e-4;
 
 impl MaterialSphere {
     pub fn new(center: nalgebra_glm::Vec3, radius: f32, mat_id: MaterialId) -> Self {

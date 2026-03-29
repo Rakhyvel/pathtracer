@@ -2,7 +2,7 @@ use apricot::{plane::Plane, ray::Ray};
 
 use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
 
-const EPS: f32 = 1e-5;
+const EPS: f32 = 1e-4;
 pub struct MaterialPlane {
     plane: Plane,
     mat_id: MaterialId,

@@ -11,8 +11,7 @@ cargo run
     - [x] Metallic
     - [x] Glossy
     - [ ] Subsurface scatter
-- [ ] Triangles and quads, loading .obj files
-- [ ] BVH
+- [x] Triangles and quads, loading .obj files
 - [ ] Textures
 - [ ] PBR
 - [ ] Adaptive sampling, denoising

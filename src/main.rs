@@ -22,7 +22,7 @@ fn main() -> Result<(), String> {
     run(
         nalgebra_glm::I32Vec2::new(800, 600),
         "Path Tracer",
-        AppConfig { mouse_warp: true },
+        AppConfig { mouse_warp: false },
         &|app| RefCell::new(Box::new(Tracer::new(app))),
     )
 }
