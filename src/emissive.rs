@@ -1,4 +1,5 @@
 use apricot::ray::Ray;
+use rand::rngs::SmallRng;
 
 use crate::{
     hit_info::HitInfo,
@@ -14,7 +15,7 @@ impl Material for Emissive {
         self.color
     }
 
-    fn scatter(&self, _ray: &Ray, _hit: &HitInfo) -> Option<ScatterResult> {
+    fn scatter(&self, _ray: &Ray, _hit: &HitInfo, _rng: &mut SmallRng) -> Option<ScatterResult> {
         None
     }
 }

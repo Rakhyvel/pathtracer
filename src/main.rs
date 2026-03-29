@@ -8,6 +8,7 @@ mod material_mgr;
 mod mesh;
 mod metallic;
 mod object;
+mod onb;
 mod plane;
 mod sphere;
 mod tracer;

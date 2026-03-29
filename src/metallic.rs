@@ -1,8 +1,9 @@
 use apricot::ray::Ray;
+use rand::rngs::SmallRng;
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult, random_unit_vector},
+    material::{Material, ScatterResult, reflect, sample_ggx},
 };
 
 pub struct Metallic {
@@ -13,25 +14,25 @@ pub struct Metallic {
 const EPS: f32 = 1e-4;
 
 impl Material for Metallic {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
+    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
 
-        let reflect_dir = i - 2.0 * i.dot(&n) * n;
-
-        // Add roughness by perturbing the reflect direction with a random unit vector
-        let mut rng = rand::thread_rng();
-        let fuzz = random_unit_vector(&mut rng) * self.roughness;
-        let scattered = (reflect_dir + fuzz).normalize();
+        let h = sample_ggx(n, self.roughness, rng);
+        let scattered = reflect(i, h).normalize();
 
         // If the scattered ray points into the surface, absorb it
         if scattered.dot(&n) <= 0.0 {
             return None;
         }
 
+        let cos_theta = (-i.dot(&h)).max(0.0);
+        let fresnel = self.albedo
+            + (nalgebra_glm::Vec3::repeat(1.0) - self.albedo) * (1.0 - cos_theta).powf(5.0);
+
         Some(ScatterResult {
             ray: Ray::new(hit.point + n * EPS, scattered),
-            attenuation: self.albedo,
+            attenuation: fresnel,
         })
     }
 }

@@ -7,7 +7,7 @@ edition = "2024"
 nalgebra-glm = "*"
 sdl2 = { version = "0.34.5", features = ["bundled", "ttf", "mixer"], default-features = false }
 apricot = { git = "https://github.com/Rakhyvel/apricot.git" }
-rand = "0.8.4"
+rand = { version = "0.8.4", features = ["small_rng"] }
 gl = "*"
 obj-rs = "*"
 rayon = "*"

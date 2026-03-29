@@ -1,9 +1,9 @@
 use apricot::ray::Ray;
-use rand::Rng;
+use rand::{Rng, rngs::SmallRng};
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult, random_unit_vector},
+    material::{Material, ScatterResult, random_unit_vector, reflect},
 };
 
 pub struct Glossy {
@@ -15,11 +15,9 @@ const EPS: f32 = 1e-4;
 const IOR: f32 = 1.5;
 
 impl Material for Glossy {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
+    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
-
-        let mut rng = rand::thread_rng();
 
         // Fresnel
         let cosi = (-i.dot(&n)).max(0.0);
@@ -27,15 +25,14 @@ impl Material for Glossy {
         let fresnel = r0 + (1.0 - r0) * (1.0 - cosi).powf(5.0);
 
         // Spectral
-        let reflect_dir = i - 2.0 * i.dot(&n) * n;
-        let mut scattered =
-            (reflect_dir + random_unit_vector(&mut rng) * self.roughness).normalize();
+        let reflect_dir = reflect(i, n);
+        let mut scattered = (reflect_dir + random_unit_vector(rng) * self.roughness).normalize();
         if scattered.dot(&n) <= 0.0 {
             scattered = reflect_dir;
         }
 
         // Diffuse
-        let diffuse = (n + random_unit_vector(&mut rng)).normalize();
+        let diffuse = (n + random_unit_vector(rng)).normalize();
 
         if rng.r#gen::<f32>() < fresnel {
             Some(ScatterResult {

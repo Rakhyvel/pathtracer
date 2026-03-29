@@ -1,9 +1,9 @@
 use apricot::ray::Ray;
-use rand::Rng;
+use rand::{Rng, rngs::SmallRng};
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult},
+    material::{Material, ScatterResult, reflect},
 };
 
 pub struct Dielectric {
@@ -14,15 +14,14 @@ pub struct Dielectric {
 const EPS: f32 = 1e-4;
 
 impl Material for Dielectric {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo) -> Option<ScatterResult> {
+    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
 
-        let reflect_dir = i - 2.0 * i.dot(&n) * n;
+        let reflect_dir = reflect(i, n);
 
         let (refract_dir, fresnel) = self.refract(i, n);
 
-        let mut rng = rand::thread_rng();
         let r: f32 = rng.gen_range(0.0..1.0);
         let choose_reflect = r < fresnel;
 
