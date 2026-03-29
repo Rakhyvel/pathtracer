@@ -4,13 +4,15 @@ use apricot::{
     opengl::{Texture, create_program},
     ray::Ray,
     rectangle::Rectangle,
-    render_core::{Mesh, TextureId},
+    render_core::TextureId,
 };
-use obj::raw::object;
 use rand::Rng;
 use rayon::prelude::*;
 use sdl2::keyboard::Scancode;
-use std::f32::consts::PI;
+use std::{
+    f32::consts::PI,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use crate::{
     dielectric::Dielectric,
@@ -27,21 +29,18 @@ use crate::{
 };
 
 pub struct Tracer {
-    n: usize,
     width: usize,
     height: usize,
     tile_size: usize,
     camera: Camera,
     texture_id: TextureId,
-    image: Vec<nalgebra_glm::Vec3>,
+    image: Vec<nalgebra_glm::Vec3>,    // image mean accumulator
+    image_sq: Vec<nalgebra_glm::Vec3>, // sum of mean accumulator
+    converged: Vec<bool>,
     samples_per_pixel: Vec<usize>,
     pixels: Vec<u8>,
     material_mgr: MaterialMgr,
     objects: Vec<Box<dyn Object>>,
-
-    // View stuff
-    facing: f32,
-    pitch: f32,
 }
 
 pub const QUAD_XY_DATA: &[u8] = include_bytes!("../res/quad-xy.obj");
@@ -50,60 +49,40 @@ pub const CUBE_DATA: &[u8] = include_bytes!("../res/cube.obj");
 
 impl Scene for Tracer {
     fn update(&mut self, app: &App) {
-        let curr_w_state = app.keys[Scancode::W as usize];
-        let curr_s_state = app.keys[Scancode::S as usize];
-        let curr_a_state = app.keys[Scancode::A as usize];
-        let curr_d_state = app.keys[Scancode::D as usize];
-        let curr_space_state = app.keys[Scancode::Space as usize];
-        let curr_shift_state = app.keys[Scancode::LShift as usize];
-
-        let up = self.camera.up();
-        let facing_vec = nalgebra_glm::vec3(self.facing.cos(), 0.0, self.facing.sin());
-        let sideways_vec = nalgebra_glm::cross(&up, &facing_vec);
-        let mut player_vel_vec: nalgebra_glm::Vec3 = nalgebra_glm::zero();
-        if curr_w_state {
-            player_vel_vec += facing_vec;
-        }
-        if curr_s_state {
-            player_vel_vec += -facing_vec;
-        }
-        if curr_a_state {
-            player_vel_vec += sideways_vec;
-        }
-        if curr_d_state {
-            player_vel_vec += -sideways_vec;
-        }
-        if curr_space_state {
-            player_vel_vec += up;
-        }
-        if curr_shift_state {
-            player_vel_vec += -up;
-        }
-
-        if false && (player_vel_vec.norm() > 0.0 || app.mouse_vel.norm() > 0.0) {
-            const VIEW_SPEED: f32 = 0.01;
-            const WALK_SPEED: f32 = 0.04;
-            self.facing += VIEW_SPEED * app.mouse_vel.x;
-            self.pitch = (self.pitch + VIEW_SPEED * app.mouse_vel.y)
-                .max(VIEW_SPEED - PI / 2.0)
-                .min(PI / 2.0 - VIEW_SPEED);
-
-            let prev_cam_pos = self.camera.position();
-            let new_cam_pos = prev_cam_pos + player_vel_vec * WALK_SPEED;
-            self.camera.set_position(new_cam_pos);
-
-            let rot_matrix = nalgebra_glm::rotate_y(
-                &nalgebra_glm::rotate_z(&nalgebra_glm::one(), self.facing),
-                self.pitch,
-            );
-            let facing_vec = (rot_matrix * nalgebra_glm::vec4(1.0, 0.0, 0.0, 0.0)).xzy();
-            self.camera.set_lookat(new_cam_pos + facing_vec);
-            self.samples_per_pixel.iter_mut().for_each(|s| *s /= 2);
+        if app.ticks % (60 * 5) == 0 {
+            let total_pixels = self.width * self.height;
+            let converged = self.converged.par_iter().filter(|&&c| c).count();
+            if converged == total_pixels {
+                println!("Image converged!");
+            } else {
+                println!(
+                    "{:.1}% converged",
+                    100.0 * converged as f32 / total_pixels as f32
+                );
+                let total = (self.width * self.height) as f32;
+                for t in [0.001, 0.003, 0.01, 0.03, 0.1, 0.3] {
+                    let count = self
+                        .image
+                        .iter()
+                        .zip(self.image_sq.iter())
+                        .zip(self.samples_per_pixel.iter())
+                        .filter(|((mean, m2), n)| confidence_interval(**mean, **m2, **n as f32) < t)
+                        .count();
+                    println!(
+                        "converged at {:.3}: {:.3}%",
+                        t,
+                        count as f32 / total * 100.0
+                    );
+                }
+            }
         }
     }
 
     fn render(&mut self, app: &App) {
-        const SAMPLES_PER_FRAME: usize = 50;
+        const SAMPLES_PER_FRAME: usize = 60;
+        const MIN_SAMPLES_BEFORE_SKIP: usize = 256;
+        const VARIANCE_TOLERANCE: f32 = 0.01;
+
         let width = self.width;
         let height = self.height;
         let objects = &self.objects;
@@ -113,42 +92,69 @@ impl Scene for Tracer {
             .par_iter_mut()
             .zip(self.pixels.par_chunks_mut(4))
             .zip(self.samples_per_pixel.par_iter_mut())
+            .zip(self.image_sq.par_iter_mut())
+            .zip(self.converged.par_iter_mut())
             .enumerate()
-            .for_each(|(i, ((image_pixel, pixel_out), sample_count))| {
-                // recover which sample number this pixel is on from the frame counter
-                let mut rng = rand::thread_rng();
-                let x = i % width;
-                let y = i / width;
+            .for_each(
+                |(
+                    i,
+                    ((((image_pixel, pixel_out), sample_count), image_sq_pixel), pixel_converged),
+                )| {
+                    if *pixel_converged {
+                        return;
+                    }
 
-                for _ in 0..SAMPLES_PER_FRAME {
-                    *sample_count += 1;
-                    let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
-                    let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
-                    let ray = self
-                        .camera
-                        .get_ray(jitter_x, jitter_y, width as f32, height as f32);
+                    // recover which sample number this pixel is on from the frame counter
+                    let mut rng = rand::thread_rng();
+                    let x = i % width;
+                    let y = i / width;
 
-                    let curr_pixel = trace(
-                        &ray,
-                        0,
-                        &mut nalgebra_glm::Vec3::new(10.0, 1.0, 1.0),
-                        objects,
-                        material_mgr,
-                    );
-                    *image_pixel += (curr_pixel - *image_pixel) / *sample_count as f32;
-                }
+                    for _ in 0..SAMPLES_PER_FRAME {
+                        // Do at least a few samples, variance and skip if converged
+                        if *sample_count > MIN_SAMPLES_BEFORE_SKIP {
+                            let interval = confidence_interval(
+                                *image_pixel,
+                                *image_sq_pixel,
+                                *sample_count as f32,
+                            );
+                            if interval < VARIANCE_TOLERANCE {
+                                *pixel_converged = true;
+                                break;
+                            }
+                        }
 
-                let mut hdr = *image_pixel;
-                let denom = hdr + nalgebra_glm::vec3(1.0, 1.0, 1.0);
-                hdr.x /= denom.x;
-                hdr.y /= denom.y;
-                hdr.z /= denom.z;
+                        let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
+                        let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
+                        let ray =
+                            self.camera
+                                .get_ray(jitter_x, jitter_y, width as f32, height as f32);
 
-                pixel_out[0] = (hdr.x * 255.0) as u8;
-                pixel_out[1] = (hdr.y * 255.0) as u8;
-                pixel_out[2] = (hdr.z * 255.0) as u8;
-                pixel_out[3] = 255;
-            });
+                        let sample = trace(
+                            &ray,
+                            0,
+                            &mut nalgebra_glm::Vec3::new(1.0, 1.0, 1.0),
+                            objects,
+                            material_mgr,
+                        );
+
+                        *sample_count += 1;
+                        let n = *sample_count as f32;
+
+                        // Raw mean for display
+                        let delta = sample - *image_pixel;
+                        *image_pixel += delta / n;
+
+                        // Mean of squares for variance
+                        *image_sq_pixel += delta.component_mul(&(sample - *image_pixel));
+                    }
+
+                    let pixel_hdr = tonemap(*image_pixel);
+                    pixel_out[0] = (pixel_hdr.x * 255.0) as u8;
+                    pixel_out[1] = (pixel_hdr.y * 255.0) as u8;
+                    pixel_out[2] = (pixel_hdr.z * 255.0) as u8;
+                    pixel_out[3] = 255;
+                },
+            );
 
         let texture = app.renderer.get_texture_from_id(self.texture_id).unwrap();
         texture.set_pixels(self.width as i32, self.height as i32, &self.pixels);
@@ -164,9 +170,19 @@ impl Scene for Tracer {
     }
 }
 
+fn confidence_interval(mean: nalgebra_glm::Vec3, m2: nalgebra_glm::Vec3, n: f32) -> f32 {
+    let variance = m2 / (n - 1.0).max(1.0);
+    let std_dev = nalgebra_glm::vec3(variance.x.sqrt(), variance.y.sqrt(), variance.z.sqrt());
+    luminance(std_dev) * (1.96 / n.sqrt()) / (luminance(mean).abs().sqrt() + 1e-6)
+}
+
+fn luminance(v: nalgebra_glm::Vec3) -> f32 {
+    0.2126 * v.x + 0.7152 * v.y + 0.0722 * v.z
+}
+
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 5;
+        const TILE_SIZE: i32 = 20;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -201,14 +217,11 @@ impl Tracer {
         texture.set_pixels(width as i32, height as i32, &pixels);
         let texture_id = app.renderer.add_texture(texture, Some("texture"));
 
-        let image: Vec<nalgebra_glm::Vec3> =
-            vec![nalgebra_glm::vec3(0.0, 0.0, 0.0); width * height * 4];
-
         // Setup materials
         let mut material_mgr = MaterialMgr::new();
         let emissive = material_mgr.add(
             Box::new(Emissive {
-                color: nalgebra_glm::vec3(1.0, 0.8, 0.5) * 200.0,
+                color: nalgebra_glm::vec3(1.0, 0.8, 0.5) * 100.0,
             }),
             Some("emissive"),
         );
@@ -265,20 +278,17 @@ impl Tracer {
             Some("glossy"),
         );
 
-        let radius = 1.0;
-        let bounds = 5.0;
-
         // Setup objects
         let objects: Vec<Box<dyn Object>> = vec![
             Box::new(MaterialMesh::new(
                 QUAD_XY_DATA,
                 emissive,
-                nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 4.9, 0.0))
+                nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 5.001, 0.0))
                     * nalgebra_glm::rotation(
                         std::f32::consts::FRAC_PI_2,
                         &nalgebra_glm::vec3(1.0, 0.0, 0.0),
                     )
-                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(0.75, 0.75, 1.0)),
+                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(1.0, 1.0, 1.0)),
             )),
             // room
             Box::new(MaterialMesh::new(
@@ -302,14 +312,44 @@ impl Tracer {
                     * nalgebra_glm::scaling(&nalgebra_glm::vec3(9.0, 5.0, 1.0)),
             )),
             Box::new(MaterialMesh::new(
-                QUAD_XY_DATA, // top
+                QUAD_XY_DATA, // top back
                 lambert_white,
-                nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 5.0, 0.0))
+                nalgebra_glm::translation(&nalgebra_glm::vec3(5.75, 5.0, 0.0))
                     * nalgebra_glm::rotation(
                         std::f32::consts::FRAC_PI_2,
                         &nalgebra_glm::vec3(1.0, 0.0, 0.0),
                     )
-                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(9.0, 5.0, 1.0)),
+                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(5.0, 5.0, 1.0)),
+            )),
+            Box::new(MaterialMesh::new(
+                QUAD_XY_DATA, // top front
+                lambert_white,
+                nalgebra_glm::translation(&nalgebra_glm::vec3(-5.75, 5.0, 0.0))
+                    * nalgebra_glm::rotation(
+                        std::f32::consts::FRAC_PI_2,
+                        &nalgebra_glm::vec3(1.0, 0.0, 0.0),
+                    )
+                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(5.0, 5.0, 1.0)),
+            )),
+            Box::new(MaterialMesh::new(
+                QUAD_XY_DATA, // top left
+                lambert_white,
+                nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 5.0, 5.75))
+                    * nalgebra_glm::rotation(
+                        std::f32::consts::FRAC_PI_2,
+                        &nalgebra_glm::vec3(1.0, 0.0, 0.0),
+                    )
+                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(5.0, 5.0, 1.0)),
+            )),
+            Box::new(MaterialMesh::new(
+                QUAD_XY_DATA, // top right
+                lambert_white,
+                nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 5.0, -5.75))
+                    * nalgebra_glm::rotation(
+                        std::f32::consts::FRAC_PI_2,
+                        &nalgebra_glm::vec3(1.0, 0.0, 0.0),
+                    )
+                    * nalgebra_glm::scaling(&nalgebra_glm::vec3(5.0, 5.0, 1.0)),
             )),
             Box::new(MaterialMesh::new(
                 QUAD_XY_DATA, // left
@@ -332,31 +372,6 @@ impl Tracer {
                     * nalgebra_glm::scaling(&nalgebra_glm::vec3(5.0, 9.0, 1.0)),
             )),
             // objects
-            // Box::new(MaterialMesh::new(
-            //     ICO_DATA,
-            //     metallic_red,
-            //     nalgebra_glm::translation(&nalgebra_glm::vec3(-2.4, 1.0 - bounds, 0.0))
-            //         * nalgebra_glm::rotation(
-            //             std::f32::consts::FRAC_PI_4,
-            //             &nalgebra_glm::vec3(0.0, 1.0, 0.0),
-            //         )
-            //         * nalgebra_glm::scaling(&nalgebra_glm::vec3(1.0, 1.0, 1.0)),
-            // )),
-            // Box::new(MaterialMesh::new(
-            //     CUBE_DATA,
-            //     glossy,
-            //     nalgebra_glm::translation(&nalgebra_glm::vec3(2.0, 3.5 - bounds, 2.0))
-            //         * nalgebra_glm::rotation(
-            //             std::f32::consts::FRAC_PI_4,
-            //             &nalgebra_glm::vec3(0.0, 1.0, 0.0),
-            //         )
-            //         * nalgebra_glm::scaling(&nalgebra_glm::vec3(2.0, 3.5, 2.0)),
-            // )),
-            // Box::new(MaterialSphere::new(
-            //     nalgebra_glm::vec3(0.0, -1.0, -2.5),
-            //     2.0,
-            //     dielectric_blue,
-            // )),
             Box::new(MaterialSphere::new(
                 nalgebra_glm::vec3(0.0, -2.5, 0.0),
                 2.5,
@@ -365,19 +380,18 @@ impl Tracer {
         ];
 
         Tracer {
-            n: 0,
             width,
             height,
             tile_size: TILE_SIZE as usize,
             camera,
             texture_id,
-            image,
+            image: vec![nalgebra_glm::vec3(1.0, 0.0, 0.0); width * height],
+            image_sq: vec![nalgebra_glm::vec3(1.0, 1.0, 1.0); width * height],
+            converged: vec![false; width * height],
             samples_per_pixel: vec![0; width * height],
             pixels,
             material_mgr,
             objects,
-            facing: 0.0,
-            pitch: 0.0,
         }
     }
 }
@@ -389,10 +403,10 @@ fn trace(
     objects: &[Box<dyn Object>],
     material_mgr: &MaterialMgr,
 ) -> nalgebra_glm::Vec3 {
-    if depth > 100 {
+    if depth > 4 {
         return nalgebra_glm::Vec3::zeros();
     }
-    if depth > 5 {
+    if depth > 3 {
         let luminance = 0.2126 * throughput.x + 0.7152 * throughput.y + 0.0722 * throughput.z;
         let survive_prob = luminance.clamp(0.05, 1.0);
         let mut rng = rand::thread_rng();
@@ -455,4 +469,17 @@ fn sky(ray: &Ray) -> nalgebra_glm::Vec3 {
     let color =
         (1.0 - t) * nalgebra_glm::vec3(1.0, 1.0, 1.0) + t * nalgebra_glm::vec3(0.5, 0.7, 1.0);
     color
+}
+
+fn aces(x: f32) -> f32 {
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    ((x * (a * x + b)) / (x * (c * x + d) + e)).clamp(0.0, 1.0)
+}
+
+fn tonemap(v: nalgebra_glm::Vec3) -> nalgebra_glm::Vec3 {
+    nalgebra_glm::vec3(aces(v.x), aces(v.y), aces(v.z))
 }

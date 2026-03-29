@@ -14,7 +14,8 @@ cargo run
 - [x] Triangles and quads, loading .obj files
 - [ ] Textures
 - [ ] PBR
-- [ ] Adaptive sampling, denoising
+- [x] Adaptive sampling
 - [ ] Lens aperture
 - [ ] True spectral rendering (rainbows!)
 - [ ] Volumetrics
+- [ ] Press enter to save current image to file

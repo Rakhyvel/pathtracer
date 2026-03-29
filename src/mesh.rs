@@ -1,4 +1,4 @@
-use apricot::{aabb::AABB, bvh::BVH, ray::Ray, tri::Tri};
+use apricot::{ray::Ray, tri::Tri};
 use obj::{Obj, TexturedVertex, load_obj};
 
 use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
