@@ -1,6 +1,6 @@
 use apricot::{ray::Ray, sphere::Sphere};
 
-use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
+use crate::{hit_info::HitInfo, material_mgr::MaterialId};
 
 pub struct MaterialSphere {
     sphere: Sphere,
@@ -16,10 +16,9 @@ impl MaterialSphere {
             mat_id,
         }
     }
-}
 
-impl Object for MaterialSphere {
-    fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
+    #[inline(always)]
+    pub fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
         let m: nalgebra_glm::Vec3 = ray.origin() - self.sphere.center;
         let b = m.dot(&ray.dir());
         let c = m.dot(&m) - self.sphere.radius * self.sphere.radius;

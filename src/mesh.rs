@@ -1,7 +1,7 @@
 use apricot::{ray::Ray, tri::Tri};
 use obj::{Obj, TexturedVertex, load_obj};
 
-use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
+use crate::{hit_info::HitInfo, material_mgr::MaterialId};
 
 pub struct MaterialMesh {
     triangles: TriangleSoup,
@@ -65,9 +65,7 @@ impl MaterialMesh {
             material: self.mat_id,
         })
     }
-}
 
-impl Object for MaterialMesh {
     fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
         self.triangles
             .triangles

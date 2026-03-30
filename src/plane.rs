@@ -1,6 +1,6 @@
 use apricot::{plane::Plane, ray::Ray};
 
-use crate::{hit_info::HitInfo, material_mgr::MaterialId, object::Object};
+use crate::{hit_info::HitInfo, material_mgr::MaterialId};
 
 const EPS: f32 = 1e-4;
 pub struct MaterialPlane {
@@ -15,10 +15,9 @@ impl MaterialPlane {
             mat_id,
         }
     }
-}
 
-impl Object for MaterialPlane {
-    fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
+    #[inline(always)]
+    pub fn intersect(&self, ray: &Ray) -> Option<HitInfo> {
         let denom = self.plane.normal().dot(&ray.dir());
         if denom.abs() < EPS {
             // parellel

@@ -11,7 +11,7 @@ use rayon::prelude::*;
 
 use crate::{
     dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
-    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::Object,
+    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::ObjectEnum,
     plane::MaterialPlane, sphere::MaterialSphere,
 };
 
@@ -27,7 +27,7 @@ pub struct Tracer {
     samples_per_pixel: Vec<usize>,
     pixels: Vec<u8>,
     material_mgr: MaterialMgr,
-    objects: Vec<Box<dyn Object>>,
+    objects: Vec<ObjectEnum>,
 }
 
 #[allow(unused)]
@@ -70,7 +70,7 @@ impl Scene for Tracer {
 
     fn render(&mut self, app: &App) {
         const MIN_SAMPLES_BEFORE_SKIP: usize = 256;
-        const VARIANCE_TOLERANCE: f32 = 0.1;
+        const VARIANCE_TOLERANCE: f32 = 0.03;
 
         let objects = &self.objects;
         let material_mgr = &self.material_mgr;
@@ -301,25 +301,25 @@ impl Tracer {
         );
 
         // Setup objects
-        let objects: Vec<Box<dyn Object>> = vec![
-            Box::new(MaterialSphere::new(
+        let objects: Vec<ObjectEnum> = vec![
+            ObjectEnum::Sphere(MaterialSphere::new(
                 nalgebra_glm::vec3(-20.0, 20.0, -20.0),
                 2.5,
                 emissive,
             )),
             // room
-            Box::new(MaterialPlane::new(
+            ObjectEnum::Plane(MaterialPlane::new(
                 nalgebra_glm::vec3(1.0, 0.0, 0.0), // back
                 -5.0,
                 lambert_white,
             )),
-            Box::new(MaterialPlane::new(
+            ObjectEnum::Plane(MaterialPlane::new(
                 nalgebra_glm::vec3(0.0, 1.0, 0.0), // bottom
                 2.5,
                 lambert_white,
             )),
             // objects
-            Box::new(MaterialSphere::new(
+            ObjectEnum::Sphere(MaterialSphere::new(
                 nalgebra_glm::vec3(0.0, 0.0, 0.0),
                 2.5,
                 ceramic,
@@ -347,7 +347,7 @@ fn trace(
     ray: &Ray,
     depth: i32,
     throughput: &mut nalgebra_glm::Vec3,
-    objects: &[Box<dyn Object>],
+    objects: &[ObjectEnum],
     material_mgr: &MaterialMgr,
     rng: &mut SmallRng,
 ) -> nalgebra_glm::Vec3 {
@@ -391,7 +391,7 @@ fn trace(
     }
 }
 
-fn cast_ray(ray: &Ray, objects: &[Box<dyn Object>]) -> Option<HitInfo> {
+fn cast_ray(ray: &Ray, objects: &[ObjectEnum]) -> Option<HitInfo> {
     let mut closest_hit: Option<HitInfo> = None;
 
     for obj in objects {
