@@ -11,3 +11,12 @@ rand = { version = "0.8.4", features = ["small_rng"] }
 gl = "*"
 obj-rs = "*"
 rayon = "*"
+criterion = "*"
+fastapprox = "*"
+
+[[bench]]
+name = "rng_bench"
+harness = false
+[[bench]]
+name = "material_bench"
+harness = false

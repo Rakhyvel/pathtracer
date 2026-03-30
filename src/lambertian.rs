@@ -19,7 +19,7 @@ impl Material for Lambertian {
         let dir = onb.to_world(random_cosine_direction(rng));
 
         Some(ScatterResult {
-            ray: Ray::new(hit.point + hit.normal * EPS, dir.normalize()),
+            ray: Ray::new(hit.point + hit.normal * EPS, dir),
             attenuation: self.albedo,
         })
     }

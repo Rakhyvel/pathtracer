@@ -3,7 +3,7 @@ mod emissive;
 mod glossy;
 mod hit_info;
 mod lambertian;
-mod material;
+pub mod material;
 mod material_mgr;
 mod mesh;
 mod metallic;

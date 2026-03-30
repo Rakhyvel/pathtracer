@@ -8,25 +8,11 @@ use apricot::{
 };
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
-use sdl2::keyboard::Scancode;
-use std::{
-    f32::consts::PI,
-    sync::atomic::{AtomicU32, Ordering},
-};
 
 use crate::{
-    dielectric::Dielectric,
-    emissive::Emissive,
-    glossy::Glossy,
-    hit_info::HitInfo,
-    lambertian::Lambertian,
-    material::THREAD_RNG,
-    material_mgr::{self, MaterialMgr},
-    mesh::MaterialMesh,
-    metallic::Metallic,
-    object::Object,
-    plane::MaterialPlane,
-    sphere::MaterialSphere,
+    dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
+    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::Object,
+    plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -44,8 +30,11 @@ pub struct Tracer {
     objects: Vec<Box<dyn Object>>,
 }
 
+#[allow(unused)]
 pub const QUAD_XY_DATA: &[u8] = include_bytes!("../res/quad-xy.obj");
+#[allow(unused)]
 pub const ICO_DATA: &[u8] = include_bytes!("../res/ico-sphere.obj");
+#[allow(unused)]
 pub const CUBE_DATA: &[u8] = include_bytes!("../res/cube.obj");
 
 impl Scene for Tracer {
@@ -81,7 +70,7 @@ impl Scene for Tracer {
 
     fn render(&mut self, app: &App) {
         const MIN_SAMPLES_BEFORE_SKIP: usize = 256;
-        const VARIANCE_TOLERANCE: f32 = 0.03;
+        const VARIANCE_TOLERANCE: f32 = 0.1;
 
         let objects = &self.objects;
         let material_mgr = &self.material_mgr;
@@ -227,36 +216,42 @@ impl Tracer {
 
         // Setup materials
         let mut material_mgr = MaterialMgr::new();
+        #[allow(unused)]
         let emissive = material_mgr.add(
             Box::new(Emissive {
                 color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 200.0,
             }),
             Some("emissive"),
         );
+        #[allow(unused)]
         let lambert_white = material_mgr.add(
             Box::new(Lambertian {
                 albedo: nalgebra_glm::vec3(0.9, 0.9, 0.9),
             }),
             Some("lambert_white"),
         );
+        #[allow(unused)]
         let lambert_blue = material_mgr.add(
             Box::new(Lambertian {
                 albedo: nalgebra_glm::vec3(0.0, 0.3, 0.7),
             }),
             Some("lambert_blue"),
         );
+        #[allow(unused)]
         let lambert_red = material_mgr.add(
             Box::new(Lambertian {
                 albedo: nalgebra_glm::vec3(0.9, 0.0, 0.0),
             }),
             Some("lambert_red"),
         );
+        #[allow(unused)]
         let lambert_green = material_mgr.add(
             Box::new(Lambertian {
                 albedo: nalgebra_glm::vec3(0.0, 0.7, 0.0),
             }),
             Some("lambert_green"),
         );
+        #[allow(unused)]
         let dielectric_blue = material_mgr.add(
             Box::new(Dielectric {
                 ior: 1.5,
@@ -264,6 +259,7 @@ impl Tracer {
             }),
             Some("dielectric_blue"),
         );
+        #[allow(unused)]
         let dielectric_green = material_mgr.add(
             Box::new(Dielectric {
                 ior: 3.01,
@@ -271,6 +267,7 @@ impl Tracer {
             }),
             Some("dielectric_green"),
         );
+        #[allow(unused)]
         let copper = material_mgr.add(
             Box::new(Metallic {
                 roughness: 0.2,
@@ -278,6 +275,7 @@ impl Tracer {
             }),
             Some("copper"),
         );
+        #[allow(unused)]
         let silver = material_mgr.add(
             Box::new(Metallic {
                 roughness: 0.0,
@@ -285,6 +283,7 @@ impl Tracer {
             }),
             Some("silver"),
         );
+        #[allow(unused)]
         let cobalt = material_mgr.add(
             Box::new(Metallic {
                 roughness: 0.0,
@@ -292,6 +291,7 @@ impl Tracer {
             }),
             Some("cobalt"),
         );
+        #[allow(unused)]
         let ceramic = material_mgr.add(
             Box::new(Glossy {
                 roughness: 0.2,
@@ -299,8 +299,6 @@ impl Tracer {
             }),
             Some("ceramic"),
         );
-
-        let hole = 1.25;
 
         // Setup objects
         let objects: Vec<Box<dyn Object>> = vec![
