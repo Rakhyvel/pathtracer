@@ -11,8 +11,8 @@ use rayon::prelude::*;
 
 use crate::{
     dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
-    lambertian::Lambertian, material_mgr::MaterialMgr, metallic::Metallic, object::ObjectEnum,
-    plane::MaterialPlane, sphere::MaterialSphere,
+    lambertian::Lambertian, material::MaterialEnum, material_mgr::MaterialMgr, metallic::Metallic,
+    object::ObjectEnum, plane::MaterialPlane, sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -70,7 +70,7 @@ impl Scene for Tracer {
 
     fn render(&mut self, app: &App) {
         const MIN_SAMPLES_BEFORE_SKIP: usize = 256;
-        const VARIANCE_TOLERANCE: f32 = 0.03;
+        const VARIANCE_TOLERANCE: f32 = 0.1;
 
         let objects = &self.objects;
         let material_mgr = &self.material_mgr;
@@ -179,7 +179,7 @@ fn luminance(v: nalgebra_glm::Vec3) -> f32 {
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 10;
+        const TILE_SIZE: i32 = 5;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -218,42 +218,42 @@ impl Tracer {
         let mut material_mgr = MaterialMgr::new();
         #[allow(unused)]
         let emissive = material_mgr.add(
-            Box::new(Emissive {
-                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 200.0,
+            MaterialEnum::Emissive(Emissive {
+                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 1000.0,
             }),
             Some("emissive"),
         );
         #[allow(unused)]
         let lambert_white = material_mgr.add(
-            Box::new(Lambertian {
+            MaterialEnum::Lambertian(Lambertian {
                 albedo: nalgebra_glm::vec3(0.9, 0.9, 0.9),
             }),
             Some("lambert_white"),
         );
         #[allow(unused)]
         let lambert_blue = material_mgr.add(
-            Box::new(Lambertian {
+            MaterialEnum::Lambertian(Lambertian {
                 albedo: nalgebra_glm::vec3(0.0, 0.3, 0.7),
             }),
             Some("lambert_blue"),
         );
         #[allow(unused)]
         let lambert_red = material_mgr.add(
-            Box::new(Lambertian {
+            MaterialEnum::Lambertian(Lambertian {
                 albedo: nalgebra_glm::vec3(0.9, 0.0, 0.0),
             }),
             Some("lambert_red"),
         );
         #[allow(unused)]
         let lambert_green = material_mgr.add(
-            Box::new(Lambertian {
+            MaterialEnum::Lambertian(Lambertian {
                 albedo: nalgebra_glm::vec3(0.0, 0.7, 0.0),
             }),
             Some("lambert_green"),
         );
         #[allow(unused)]
         let dielectric_blue = material_mgr.add(
-            Box::new(Dielectric {
+            MaterialEnum::Dielectric(Dielectric {
                 ior: 1.5,
                 tint: nalgebra_glm::vec3(0.95, 0.98, 1.0),
             }),
@@ -261,7 +261,7 @@ impl Tracer {
         );
         #[allow(unused)]
         let dielectric_green = material_mgr.add(
-            Box::new(Dielectric {
+            MaterialEnum::Dielectric(Dielectric {
                 ior: 3.01,
                 tint: nalgebra_glm::vec3(0.7, 0.95, 0.7),
             }),
@@ -269,31 +269,31 @@ impl Tracer {
         );
         #[allow(unused)]
         let copper = material_mgr.add(
-            Box::new(Metallic {
-                roughness: 0.2,
+            MaterialEnum::Metallic(Metallic {
+                roughness: 0.0,
                 albedo: nalgebra_glm::vec3(0.95, 0.64, 0.54),
             }),
             Some("copper"),
         );
         #[allow(unused)]
         let silver = material_mgr.add(
-            Box::new(Metallic {
-                roughness: 0.0,
+            MaterialEnum::Metallic(Metallic {
+                roughness: 0.1,
                 albedo: nalgebra_glm::vec3(0.97, 0.96, 0.91),
             }),
             Some("silver"),
         );
         #[allow(unused)]
         let cobalt = material_mgr.add(
-            Box::new(Metallic {
-                roughness: 0.0,
+            MaterialEnum::Metallic(Metallic {
+                roughness: 0.1,
                 albedo: nalgebra_glm::vec3(0.2, 0.35, 0.8),
             }),
             Some("cobalt"),
         );
         #[allow(unused)]
         let ceramic = material_mgr.add(
-            Box::new(Glossy {
+            MaterialEnum::Glossy(Glossy {
                 roughness: 0.2,
                 albedo: nalgebra_glm::vec3(0.65, 0.8, 0.75),
             }),
@@ -302,9 +302,9 @@ impl Tracer {
 
         // Setup objects
         let objects: Vec<ObjectEnum> = vec![
-            ObjectEnum::Sphere(MaterialSphere::new(
-                nalgebra_glm::vec3(-20.0, 20.0, -20.0),
-                2.5,
+            ObjectEnum::Plane(MaterialPlane::new(
+                nalgebra_glm::vec3(1.0, 0.0, 1.0),
+                100.0,
                 emissive,
             )),
             // room
@@ -318,11 +318,26 @@ impl Tracer {
                 2.5,
                 lambert_white,
             )),
+            ObjectEnum::Plane(MaterialPlane::new(
+                nalgebra_glm::vec3(0.0, 1.0, 0.0), // top
+                -7.5,
+                lambert_white,
+            )),
+            ObjectEnum::Plane(MaterialPlane::new(
+                nalgebra_glm::vec3(0.0, 0.0, 1.0), // left
+                -5.0,
+                lambert_red,
+            )),
+            ObjectEnum::Plane(MaterialPlane::new(
+                nalgebra_glm::vec3(0.0, 0.0, 1.0), // right
+                5.0,
+                lambert_blue,
+            )),
             // objects
             ObjectEnum::Sphere(MaterialSphere::new(
                 nalgebra_glm::vec3(0.0, 0.0, 0.0),
                 2.5,
-                ceramic,
+                silver,
             )),
         ];
 

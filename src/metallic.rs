@@ -3,7 +3,7 @@ use rand::rngs::SmallRng;
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult, reflect, sample_ggx},
+    material::{ScatterResult, reflect, sample_ggx},
 };
 
 pub struct Metallic {
@@ -13,8 +13,8 @@ pub struct Metallic {
 
 const EPS: f32 = 1e-4;
 
-impl Material for Metallic {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
+impl Metallic {
+    pub fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
 

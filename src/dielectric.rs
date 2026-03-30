@@ -3,7 +3,7 @@ use rand::{Rng, rngs::SmallRng};
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult, reflect},
+    material::{ScatterResult, reflect},
 };
 
 pub struct Dielectric {
@@ -13,8 +13,8 @@ pub struct Dielectric {
 
 const EPS: f32 = 1e-4;
 
-impl Material for Dielectric {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
+impl Dielectric {
+    pub fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
 
@@ -37,9 +37,7 @@ impl Material for Dielectric {
             })
         }
     }
-}
 
-impl Dielectric {
     fn refract(&self, i: nalgebra_glm::Vec3, n: nalgebra_glm::Vec3) -> (nalgebra_glm::Vec3, f32) {
         let cosi = -i.dot(&n).clamp(-1.0, 1.0);
         let etai = 1.0;

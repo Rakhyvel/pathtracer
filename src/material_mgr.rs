@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use apricot::render_core::OpaqueId;
 
-use crate::material::Material;
+use crate::material::MaterialEnum;
 
 /// Opaque type used by the texture manager to associate textures.
 #[derive(Copy, Clone, Debug)]
@@ -19,7 +19,7 @@ impl OpaqueId for MaterialId {
 }
 
 pub struct MaterialMgr {
-    materials: Vec<Box<dyn Material>>,
+    materials: Vec<MaterialEnum>,
     keys: HashMap<&'static str, MaterialId>,
 }
 
@@ -31,7 +31,7 @@ impl MaterialMgr {
         }
     }
 
-    pub fn add(&mut self, mat: Box<dyn Material>, name: Option<&'static str>) -> MaterialId {
+    pub fn add(&mut self, mat: MaterialEnum, name: Option<&'static str>) -> MaterialId {
         let id = MaterialId::new(self.materials.len());
         self.materials.push(mat);
         if name.is_some() {
@@ -40,7 +40,7 @@ impl MaterialMgr {
         id
     }
 
-    pub fn get_from_id(&self, id: MaterialId) -> Option<&dyn Material> {
-        self.materials.get(id.as_usize()).map(|b| b.as_ref())
+    pub fn get_from_id(&self, id: MaterialId) -> Option<&MaterialEnum> {
+        self.materials.get(id.as_usize())
     }
 }

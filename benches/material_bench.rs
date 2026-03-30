@@ -4,7 +4,6 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use nalgebra_glm::vec3;
 use pathtracer::hit_info::HitInfo;
 use pathtracer::lambertian::Lambertian;
-use pathtracer::material::Material;
 use pathtracer::material_mgr::MaterialId;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;

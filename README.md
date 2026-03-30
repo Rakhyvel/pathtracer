@@ -12,10 +12,10 @@ cargo run
     - [x] Glossy
     - [ ] Subsurface scatter
 - [x] Triangles and quads, loading .obj files
+- [ ] Loading scenes from Karta files, writing output to png
 - [ ] Textures
 - [ ] PBR
 - [x] Adaptive sampling
 - [ ] Lens aperture
 - [ ] True spectral rendering (rainbows!)
 - [ ] Volumetrics
-- [ ] Press enter to save current image to file

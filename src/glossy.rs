@@ -3,7 +3,7 @@ use rand::{Rng, rngs::SmallRng};
 
 use crate::{
     hit_info::HitInfo,
-    material::{Material, ScatterResult, random_unit_vector, reflect},
+    material::{ScatterResult, random_unit_vector, reflect},
 };
 
 pub struct Glossy {
@@ -14,8 +14,8 @@ pub struct Glossy {
 const EPS: f32 = 1e-4;
 const IOR: f32 = 1.5;
 
-impl Material for Glossy {
-    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
+impl Glossy {
+    pub fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
         let i = ray.dir().normalize();
         let n = hit.normal;
 

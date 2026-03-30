@@ -4,14 +4,38 @@ use apricot::ray::Ray;
 use nalgebra_glm::{Vec3, vec3};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
-use crate::{hit_info::HitInfo, onb::ONB};
+use crate::{
+    dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
+    lambertian::Lambertian, metallic::Metallic, onb::ONB,
+};
 
-pub trait Material: Send + Sync {
-    fn emission(&self) -> Vec3 {
-        return vec3(0.0, 0.0, 0.0);
+pub enum MaterialEnum {
+    Dielectric(Dielectric),
+    Emissive(Emissive),
+    Glossy(Glossy),
+    Lambertian(Lambertian),
+    Metallic(Metallic),
+}
+
+impl MaterialEnum {
+    #[inline(always)]
+    pub fn emission(&self) -> Vec3 {
+        match self {
+            MaterialEnum::Emissive(e) => e.color,
+            _ => vec3(0.0, 0.0, 0.0),
+        }
     }
 
-    fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult>;
+    #[inline(always)]
+    pub fn scatter(&self, ray: &Ray, hit: &HitInfo, rng: &mut SmallRng) -> Option<ScatterResult> {
+        match self {
+            MaterialEnum::Dielectric(d) => d.scatter(ray, hit, rng),
+            MaterialEnum::Emissive(_e) => None,
+            MaterialEnum::Glossy(g) => g.scatter(ray, hit, rng),
+            MaterialEnum::Lambertian(l) => l.scatter(ray, hit, rng),
+            MaterialEnum::Metallic(m) => m.scatter(ray, hit, rng),
+        }
+    }
 }
 
 pub struct ScatterResult {
