@@ -6,13 +6,22 @@ use apricot::{
     rectangle::Rectangle,
     render_core::TextureId,
 };
+use nalgebra_glm::{Vec3, vec3};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 
 use crate::{
-    dielectric::Dielectric, emissive::Emissive, glossy::Glossy, hit_info::HitInfo,
-    lambertian::Lambertian, material::MaterialEnum, material_mgr::MaterialMgr, metallic::Metallic,
-    object::ObjectEnum, plane::MaterialPlane, sphere::MaterialSphere,
+    dielectric::Dielectric,
+    emissive::Emissive,
+    glossy::{self, Glossy},
+    hit_info::HitInfo,
+    lambertian::Lambertian,
+    material::MaterialEnum,
+    material_mgr::MaterialMgr,
+    metallic::Metallic,
+    object::ObjectEnum,
+    plane::MaterialPlane,
+    sphere::MaterialSphere,
 };
 
 pub struct Tracer {
@@ -21,8 +30,8 @@ pub struct Tracer {
     tile_size: usize,
     camera: Camera,
     texture_id: TextureId,
-    image: Vec<nalgebra_glm::Vec3>,    // image mean accumulator
-    image_sq: Vec<nalgebra_glm::Vec3>, // sum of mean accumulator
+    image: Vec<Vec3>,    // image mean accumulator
+    image_sq: Vec<Vec3>, // sum of mean accumulator
     converged: Vec<bool>,
     samples_per_pixel: Vec<usize>,
     pixels: Vec<u8>,
@@ -69,8 +78,9 @@ impl Scene for Tracer {
     }
 
     fn render(&mut self, app: &App) {
-        const MIN_SAMPLES_BEFORE_SKIP: usize = 256;
-        const VARIANCE_TOLERANCE: f32 = 0.1;
+        const ANTI_ALIASING: f32 = 0.5;
+        const MIN_SAMPLES_BEFORE_SKIP: usize = 1;
+        const VARIANCE_TOLERANCE: f32 = 0.01;
 
         let objects = &self.objects;
         let material_mgr = &self.material_mgr;
@@ -79,7 +89,7 @@ impl Scene for Tracer {
         let height = self.height;
 
         let start = std::time::Instant::now();
-        let max_duration = std::time::Duration::from_millis(16);
+        let max_duration = std::time::Duration::from_millis(32);
 
         // split your image into chunks of rows
         self.image
@@ -117,8 +127,8 @@ impl Scene for Tracer {
                                 }
                             }
 
-                            let jitter_x = x as f32 + rng.gen_range(-0.5..0.5);
-                            let jitter_y = y as f32 + rng.gen_range(-0.5..0.5);
+                            let jitter_x = x as f32 + rng.gen_range(-ANTI_ALIASING..ANTI_ALIASING);
+                            let jitter_y = y as f32 + rng.gen_range(-ANTI_ALIASING..ANTI_ALIASING);
 
                             let ray = self.camera.get_ray(
                                 jitter_x,
@@ -127,14 +137,7 @@ impl Scene for Tracer {
                                 height as f32,
                             );
 
-                            let sample = trace(
-                                &ray,
-                                0,
-                                &mut nalgebra_glm::vec3(1.0, 1.0, 1.0),
-                                objects,
-                                material_mgr,
-                                &mut rng,
-                            );
+                            let sample = trace(ray, objects, material_mgr, &mut rng);
 
                             *sample_count += 1;
                             let n = *sample_count as f32;
@@ -167,19 +170,26 @@ impl Scene for Tracer {
     }
 }
 
-fn confidence_interval(mean: nalgebra_glm::Vec3, m2: nalgebra_glm::Vec3, n: f32) -> f32 {
-    let variance = m2 / (n - 1.0).max(1.0);
-    let std_dev = nalgebra_glm::vec3(variance.x.sqrt(), variance.y.sqrt(), variance.z.sqrt());
-    luminance(std_dev) * (1.96 / n.sqrt()) / (luminance(mean).abs().sqrt() + 1e-6)
+fn confidence_interval(mean: Vec3, m2: Vec3, n: f32) -> f32 {
+    let var = m2 / (n - 1.0).max(1.0);
+    let std = vec3(var.x.sqrt(), var.y.sqrt(), var.z.sqrt());
+
+    let rel_r = std.x / (mean.x.abs() + 1e-6);
+    let rel_g = std.y / (mean.y.abs() + 1e-6);
+    let rel_b = std.z / (mean.z.abs() + 1e-6);
+
+    let rel = rel_r.max(rel_g).max(rel_b);
+
+    1.96 * rel / n.sqrt()
 }
 
-fn luminance(v: nalgebra_glm::Vec3) -> f32 {
+fn luminance(v: Vec3) -> f32 {
     0.2126 * v.x + 0.7152 * v.y + 0.0722 * v.z
 }
 
 impl Tracer {
     pub fn new(app: &App) -> Self {
-        const TILE_SIZE: i32 = 5;
+        const TILE_SIZE: i32 = 10;
 
         let width = (app.window_size.x / TILE_SIZE) as usize;
         let height = (app.window_size.y / TILE_SIZE) as usize;
@@ -195,9 +205,9 @@ impl Tracer {
         app.renderer
             .add_mesh_from_obj(QUAD_XY_DATA, Some("quad-xy"));
 
-        let position = nalgebra_glm::vec3(-19.0, 0.0, 0.0);
-        let lookat = nalgebra_glm::vec3(0.0, 0.0, 0.0);
-        let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
+        let position = vec3(-19.0, 0.0, 0.0);
+        let lookat = vec3(0.0, 0.0, 0.0);
+        let up = vec3(0.0, 1.0, 0.0);
 
         let camera = Camera::new(
             position,
@@ -219,35 +229,35 @@ impl Tracer {
         #[allow(unused)]
         let emissive = material_mgr.add(
             MaterialEnum::Emissive(Emissive {
-                color: nalgebra_glm::vec3(1.0, 1.0, 1.0) * 1000.0,
+                color: vec3(1.0, 1.0, 1.0) * 1.0,
             }),
             Some("emissive"),
         );
         #[allow(unused)]
         let lambert_white = material_mgr.add(
             MaterialEnum::Lambertian(Lambertian {
-                albedo: nalgebra_glm::vec3(0.9, 0.9, 0.9),
+                albedo: vec3(0.9, 0.9, 0.9),
             }),
             Some("lambert_white"),
         );
         #[allow(unused)]
         let lambert_blue = material_mgr.add(
             MaterialEnum::Lambertian(Lambertian {
-                albedo: nalgebra_glm::vec3(0.0, 0.3, 0.7),
+                albedo: vec3(0.0, 0.3, 0.7),
             }),
             Some("lambert_blue"),
         );
         #[allow(unused)]
         let lambert_red = material_mgr.add(
             MaterialEnum::Lambertian(Lambertian {
-                albedo: nalgebra_glm::vec3(0.9, 0.0, 0.0),
+                albedo: vec3(0.9, 0.0, 0.0),
             }),
             Some("lambert_red"),
         );
         #[allow(unused)]
         let lambert_green = material_mgr.add(
             MaterialEnum::Lambertian(Lambertian {
-                albedo: nalgebra_glm::vec3(0.0, 0.7, 0.0),
+                albedo: vec3(0.0, 0.7, 0.0),
             }),
             Some("lambert_green"),
         );
@@ -255,7 +265,7 @@ impl Tracer {
         let dielectric_blue = material_mgr.add(
             MaterialEnum::Dielectric(Dielectric {
                 ior: 1.5,
-                tint: nalgebra_glm::vec3(0.95, 0.98, 1.0),
+                tint: vec3(0.5, 0.6, 1.0),
             }),
             Some("dielectric_blue"),
         );
@@ -263,7 +273,7 @@ impl Tracer {
         let dielectric_green = material_mgr.add(
             MaterialEnum::Dielectric(Dielectric {
                 ior: 3.01,
-                tint: nalgebra_glm::vec3(0.7, 0.95, 0.7),
+                tint: vec3(0.7, 0.95, 0.7),
             }),
             Some("dielectric_green"),
         );
@@ -271,15 +281,15 @@ impl Tracer {
         let copper = material_mgr.add(
             MaterialEnum::Metallic(Metallic {
                 roughness: 0.0,
-                albedo: nalgebra_glm::vec3(0.95, 0.64, 0.54),
+                albedo: vec3(0.95, 0.64, 0.54),
             }),
             Some("copper"),
         );
         #[allow(unused)]
         let silver = material_mgr.add(
             MaterialEnum::Metallic(Metallic {
-                roughness: 0.1,
-                albedo: nalgebra_glm::vec3(0.97, 0.96, 0.91),
+                roughness: 0.0,
+                albedo: vec3(0.97, 0.96, 0.91),
             }),
             Some("silver"),
         );
@@ -287,7 +297,7 @@ impl Tracer {
         let cobalt = material_mgr.add(
             MaterialEnum::Metallic(Metallic {
                 roughness: 0.1,
-                albedo: nalgebra_glm::vec3(0.2, 0.35, 0.8),
+                albedo: vec3(0.2, 0.35, 0.8),
             }),
             Some("cobalt"),
         );
@@ -295,49 +305,49 @@ impl Tracer {
         let ceramic = material_mgr.add(
             MaterialEnum::Glossy(Glossy {
                 roughness: 0.2,
-                albedo: nalgebra_glm::vec3(0.65, 0.8, 0.75),
+                albedo: vec3(0.92, 0.9, 0.88),
             }),
             Some("ceramic"),
         );
 
         // Setup objects
         let objects: Vec<ObjectEnum> = vec![
-            ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(1.0, 0.0, 1.0),
+            ObjectEnum::Sphere(MaterialSphere::new(
+                vec3(-100.0, 100.0, 100.0),
                 100.0,
                 emissive,
             )),
             // room
             ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(1.0, 0.0, 0.0), // back
+                vec3(1.0, 0.0, 0.0), // back
                 -5.0,
-                lambert_white,
+                ceramic,
             )),
             ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(0.0, 1.0, 0.0), // bottom
+                vec3(0.0, 1.0, 0.0), // bottom
                 2.5,
-                lambert_white,
+                ceramic,
             )),
-            ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(0.0, 1.0, 0.0), // top
-                -7.5,
-                lambert_white,
-            )),
-            ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(0.0, 0.0, 1.0), // left
-                -5.0,
-                lambert_red,
-            )),
-            ObjectEnum::Plane(MaterialPlane::new(
-                nalgebra_glm::vec3(0.0, 0.0, 1.0), // right
-                5.0,
-                lambert_blue,
-            )),
+            // ObjectEnum::Plane(MaterialPlane::new(
+            //     vec3(0.0, 1.0, 0.0), // top
+            //     -7.5,
+            //     lambert_white,
+            // )),
+            // ObjectEnum::Plane(MaterialPlane::new(
+            //     vec3(0.0, 0.0, 1.0), // left
+            //     -5.0,
+            //     lambert_red,
+            // )),
+            // ObjectEnum::Plane(MaterialPlane::new(
+            //     vec3(0.0, 0.0, 1.0), // right
+            //     5.0,
+            //     lambert_blue,
+            // )),
             // objects
             ObjectEnum::Sphere(MaterialSphere::new(
-                nalgebra_glm::vec3(0.0, 0.0, 0.0),
+                vec3(0.0, 0.0, 0.0),
                 2.5,
-                silver,
+                dielectric_blue,
             )),
         ];
 
@@ -347,8 +357,8 @@ impl Tracer {
             tile_size: TILE_SIZE as usize,
             camera,
             texture_id,
-            image: vec![nalgebra_glm::vec3(1.0, 0.0, 0.0); width * height],
-            image_sq: vec![nalgebra_glm::vec3(1.0, 1.0, 1.0); width * height],
+            image: vec![vec3(1.0, 0.0, 0.0); width * height],
+            image_sq: vec![vec3(1.0, 1.0, 1.0); width * height],
             converged: vec![false; width * height],
             samples_per_pixel: vec![0; width * height],
             pixels,
@@ -358,52 +368,47 @@ impl Tracer {
     }
 }
 
-fn trace(
-    ray: &Ray,
-    depth: i32,
-    throughput: &mut nalgebra_glm::Vec3,
-    objects: &[ObjectEnum],
-    material_mgr: &MaterialMgr,
-    rng: &mut SmallRng,
-) -> nalgebra_glm::Vec3 {
-    if depth > 10 {
-        return nalgebra_glm::Vec3::zeros();
-    }
-    if depth > 3 {
-        let survive_prob = luminance(*throughput).clamp(0.05, 1.0);
-        if rng.r#gen::<f32>() > survive_prob {
-            return nalgebra_glm::Vec3::zeros();
+fn trace(ray: Ray, objects: &[ObjectEnum], material_mgr: &MaterialMgr, rng: &mut SmallRng) -> Vec3 {
+    let mut throughput = vec3(1.0, 1.0, 1.0);
+    let mut radiance = vec3(0.0, 0.0, 0.0);
+
+    const MAX_DEPTH: usize = 10;
+
+    let mut ray = ray;
+    for depth in 0..MAX_DEPTH {
+        let hit = cast_ray(&ray, objects);
+        if hit.is_none() {
+            break;
         }
-        *throughput /= survive_prob;
-    }
 
-    let hit = cast_ray(ray, objects);
+        let hit = hit.unwrap();
 
-    if hit.is_none() {
-        return sky(ray) * 0.0;
-    }
-    let hit = hit.unwrap();
+        let mat = material_mgr.get_from_id(hit.material).unwrap();
 
-    let hit_material = material_mgr.get_from_id(hit.material).unwrap();
+        // Add emission
+        radiance += throughput.component_mul(&mat.emission());
 
-    let emitted = hit_material.emission();
+        // Scatter
+        let scatter = match mat.scatter(&ray, &hit, rng) {
+            None => break,
+            Some(s) => s,
+        };
 
-    match hit_material.scatter(ray, &hit, rng) {
-        None => emitted,
-        Some(scatter) => {
-            let mut next_throughput: nalgebra_glm::Vec3 =
-                throughput.component_mul(&scatter.attenuation);
-            let incoming = trace(
-                &scatter.ray,
-                depth + 1,
-                &mut next_throughput,
-                objects,
-                material_mgr,
-                rng,
-            );
-            emitted + scatter.attenuation.component_mul(&incoming)
+        // Update throughput
+        throughput = throughput.component_mul(&scatter.attenuation);
+
+        // Move the ray for the next bounce
+        ray = scatter.ray;
+
+        if depth > 3 {
+            let p = luminance(throughput).clamp(0.05, 0.95);
+            if rng.r#gen::<f32>() > p {
+                break;
+            }
+            throughput /= p;
         }
     }
+    radiance
 }
 
 fn cast_ray(ray: &Ray, objects: &[ObjectEnum]) -> Option<HitInfo> {
@@ -425,14 +430,6 @@ fn cast_ray(ray: &Ray, objects: &[ObjectEnum]) -> Option<HitInfo> {
     closest_hit
 }
 
-fn sky(ray: &Ray) -> nalgebra_glm::Vec3 {
-    let d = ray.dir().normalize();
-    let t = 0.5 * (d.y + 1.0);
-    let color =
-        (1.0 - t) * nalgebra_glm::vec3(1.0, 1.0, 1.0) + t * nalgebra_glm::vec3(0.5, 0.7, 1.0);
-    color
-}
-
 fn aces(x: f32) -> f32 {
     let a = 2.51;
     let b = 0.03;
@@ -442,6 +439,6 @@ fn aces(x: f32) -> f32 {
     ((x * (a * x + b)) / (x * (c * x + d) + e)).clamp(0.0, 1.0)
 }
 
-fn tonemap(v: nalgebra_glm::Vec3) -> nalgebra_glm::Vec3 {
-    nalgebra_glm::vec3(aces(v.x), aces(v.y), aces(v.z))
+fn tonemap(v: Vec3) -> Vec3 {
+    vec3(aces(v.x), aces(v.y), aces(v.z))
 }
